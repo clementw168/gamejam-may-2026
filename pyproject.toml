@@ -1,0 +1,65 @@
+[project]
+name = "gamejam-may-2026"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+]
+authors = [
+    { name = "Clement Wang", email = "clementwang.pro@gmail.com" },
+]
+readme = "README.md"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.6",
+    "pyright>=1.1.394",
+    "pytest>=8.3.4",
+    "pytest-cov>=6.0.0",
+    "coverage>=7.6.12",
+]
+
+[tool.uv]
+package = true
+
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "PIE",  # flake8-pie
+    "SIM",  # flake8-simplify
+    "RET",  # flake8-return
+    "ARG",  # flake8-unused-arguments
+    "PTH",  # flake8-use-pathlib
+    "PL",   # pylint
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG", "S101", "PLR2004"]
+"*.ipynb" = ["ALL"]
+
+[tool.pyright]
+include = ["src/gamejam_may_2026"]
+exclude = []
+strict = []
+
+reportUntypedFunctionDecorator = false
+pythonVersion = "3.11"
+pythonPlatform = "Linux"
+
+[tool.pytest.ini_options]
+testpaths = ["./tests/"]
+filterwarnings = []
+
+

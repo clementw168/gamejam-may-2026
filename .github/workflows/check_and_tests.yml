@@ -1,0 +1,33 @@
+name: Lint, type check and unit tests
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main_
+    tags:
+      - v*
+jobs:
+  check-and-tests-job:
+    name: job to run unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the repo
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          clean: 'false'
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.11
+          architecture: x64
+      - name: Set up UV
+        run: |
+          pip install uv
+          uv sync --all-extras
+      - name: Lint and type check
+        run: |
+          make check
+      - name: Test and coverage
+        run: |
+          make test-coverage
