@@ -1,14 +1,17 @@
 """Lightweight particle system."""
 
 from __future__ import annotations
+
 import math
 import random
+
 import pygame
+
 from gamejam_may_2026 import constants as C
 
 
 class Particle:
-    __slots__ = ('x', 'y', 'vx', 'vy', 'r', 'g', 'b', 'life', 'max_life', 'size', 'gravity')
+    __slots__ = ('b', 'g', 'gravity', 'life', 'max_life', 'r', 'size', 'vx', 'vy', 'x', 'y')
 
     def __init__(
         self,
@@ -184,3 +187,81 @@ class ParticleSystem:
         self.emit(x, y, 12,
                   [(205, 100, 255), (255, 255, 255), (165, 90, 210)],
                   140, 0, 180, 0.50, size=3.0)
+
+    # ── Boss phase-2 bursts ────────────────────────────────────────────────────
+
+    def emit_warden_phase2(self, x: float, y: float) -> None:
+        """Phase-2 burst when Iron Warden crosses 50 % HP."""
+        self.emit(x, y, 20,
+                  [C.C_WARDEN_SPARK, C.C_WARDEN, (255, 250, 200)],
+                  220, 0, 180, 0.70, size=4.5)
+        self.emit(x, y, 10,
+                  [(160, 140, 100), (200, 170, 120)],
+                  90, 270, 80, 0.90, size=2.5, gravity=200)
+
+    def emit_leech_phase2(self, x: float, y: float) -> None:
+        """Phase-2 burst when Abyssal Leech crosses 50 % HP."""
+        self.emit(x, y, 22,
+                  [C.C_LEECH_SHOT, C.C_LEECH, (180, 240, 255)],
+                  190, 0, 180, 0.80, size=4.5)
+        self.emit(x, y, 8,
+                  [(40, 185, 210), (14, 42, 60)],
+                  70, 0, 180, 1.00, size=3.0)
+
+    def emit_matriarch_phase2(self, x: float, y: float) -> None:
+        """Phase-2 burst when Fungal Matriarch crosses 50 % HP."""
+        self.emit(x, y, 24,
+                  [C.C_MATRIARCH_SPORE, C.C_MATRIARCH, (200, 255, 120)],
+                  180, 0, 180, 0.85, size=5.0)
+        self.emit(x, y, 12,
+                  [(155, 210, 85), (220, 255, 150)],
+                  80, 270, 80, 1.10, size=2.5, gravity=200)
+
+    def emit_sovereign_phase2(self, x: float, y: float) -> None:
+        """Phase-2 burst when Void Sovereign crosses 50 % HP — deep void explosion."""
+        self.emit(x, y, 30,
+                  [C.C_SOVEREIGN_SHOT, (80, 20, 160), (200, 130, 255)],
+                  240, 0, 180, 0.90, size=5.5)
+        self.emit(x, y, 14,
+                  [C.C_SOVEREIGN, (130, 55, 255)],
+                  100, 0, 180, 1.20, size=3.0)
+
+    # ── Boss death bursts ──────────────────────────────────────────────────────
+
+    def emit_warden_death(self, x: float, y: float) -> None:
+        self.emit(x, y, 22,
+                  [C.C_WARDEN_SPARK, C.C_WARDEN, (255, 250, 200)],
+                  190, 0, 180, 0.90, size=5.5, gravity=80)
+        self.emit(x, y, 10,
+                  [(200, 170, 120), (130, 110, 80)],
+                  80, 270, 70, 1.20, size=3.5, gravity=200)
+
+    def emit_leech_death(self, x: float, y: float) -> None:
+        self.emit(x, y, 26,
+                  [C.C_LEECH_SHOT, C.C_LEECH, (180, 240, 255)],
+                  200, 0, 180, 0.95, size=6.0, gravity=80)
+        self.emit(x, y, 10,
+                  [(40, 185, 210), (14, 42, 60)],
+                  80, 270, 80, 1.20, size=3.5, gravity=200)
+
+    def emit_matriarch_death(self, x: float, y: float) -> None:
+        self.emit(x, y, 30,
+                  [C.C_MATRIARCH_SPORE, C.C_MATRIARCH, (200, 255, 120)],
+                  200, 0, 180, 1.00, size=6.5, gravity=70)
+        self.emit(x, y, 14,
+                  [(155, 210, 85), (220, 255, 150)],
+                  80, 270, 80, 1.30, size=3.5, gravity=200)
+        self.emit(x, y, 6,
+                  [(255, 255, 255), (200, 255, 150)],
+                  120, 0, 180, 0.60, size=2.0)
+
+    def emit_sovereign_death(self, x: float, y: float) -> None:
+        self.emit(x, y, 35,
+                  [C.C_SOVEREIGN_SHOT, (80, 20, 160), (200, 130, 255)],
+                  250, 0, 180, 1.00, size=7.0)
+        self.emit(x, y, 18,
+                  [C.C_SOVEREIGN, (130, 55, 255), (255, 255, 255)],
+                  100, 0, 180, 1.50, size=4.0)
+        self.emit(x, y, 10,
+                  [(255, 255, 255), (200, 150, 255)],
+                  60, 0, 180, 0.80, size=2.5)

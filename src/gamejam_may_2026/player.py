@@ -56,9 +56,7 @@ class Player:
         # Radius (collision)
         self.radius = C.PLAYER_RADIUS
 
-        # Poison status (applied by VenomfangBat)
-        self._poison_t    = 0.0   # seconds remaining
-        self._poison_tick = 0.0   # accumulator for 1 HP/s damage tick
+
 
         # Dead flag
         self.dead = False
@@ -180,19 +178,6 @@ class Player:
                 for i in range(8):
                     self._void_queue.append((self.x, self.y, i * math.pi / 4))
 
-        # Poison DoT — 1 HP/s, bypasses iframes
-        if self._poison_t > 0:
-            self._poison_t    = max(0.0, self._poison_t - dt)
-            self._poison_tick += dt
-            if self._poison_tick >= 1.0:
-                self._poison_tick = 0.0
-                self.hp -= 1
-                if self.hp <= 0:
-                    if config.DEBUG:
-                        self.hp = 1
-                    else:
-                        self.hp = 0
-                        self.dead = True
 
         if self._dashing:
             self._dash_timer -= dt
@@ -281,11 +266,7 @@ class Player:
         color = (255, 255, 255) if self._flash > 0 else (C.C_DASH_TRAIL if self._dashing else C.C_PLAYER)
         dark = (80, 70, 60) if not self._dashing else (60, 100, 160)
 
-        # Poison glow ring
-        if self._poison_t > 0:
-            pulse = (math.sin(self._poison_t * 7.0) + 1.0) * 0.5
-            ring_r = self.radius + 4 + round(pulse * 3)
-            pygame.draw.circle(surf, (45, 205, 60), (sx, sy), ring_r, 2)
+
 
         # Shadow
         pygame.draw.circle(surf, (8, 8, 8), (sx + 2, sy + 4), self.radius - 2)

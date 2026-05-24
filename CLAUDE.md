@@ -63,7 +63,7 @@ uv run verdant-depths [--keys arrows|wasd|zqsd]
 | Wolf | melee flanker | all | wobble approach + lunge dash when ≤130 px; HP 2/3/4 |
 | SporePlant | stationary ranged | all | alternating 4-way spore volleys (0°/45°); HP 5/7/9 |
 | **StoneCrawler** | melee chaser | **4+** | Armoured: first 3 arrow hits deflected (shell ring + pips); 2 dmg/contact; HP 8+; drops 4 coins |
-| **VenomfangBat** | fast melee | **4+** | Arc wobble movement (120 px/s perp.); poisons player for 3 s on contact; HP 2; drops 3 coins |
+| **VenomfangBat** | fast melee | **4+** | Arc wobble movement (120 px/s perp.); deals 1 contact damage; HP 2; drops 3 coins |
 | **CrystalTurret** | stationary ranged | **5+** | Rotating 3-way crystal volleys; immune from front ±60°, double damage from back; HP 10+; drops 5 coins |
 | **ShadowWraith** | teleporting caster | **5+** | Teleports every 4 s (>300 px from player); fires 2-way homing projectiles; HP 4; drops 5 coins |
 | **BoneArcher** | ranged | **6+** | 3-way spread every 1.4 s; every 4th shot is a slow bone spike (dmg 2); HP 4+; drops 4 coins |
@@ -132,12 +132,12 @@ Override any track: drop `<name>.ogg` (or `.wav`) in `src/gamejam_may_2026/asset
 | 6 | ✅ done | Goblin Shaman + Ancient Tree bosses (2-phase, bolt/summon/root/thorn), boss HP bar, balance pass (floor-scaled enemy HP/speed), BFS deadlock fix, upgrade-click grace period, boss-gate hint tooltip |
 | 7 | ✅ done | Main menu (title + controls + best run), run-summary death/victory screens (floor/rooms/coins/time), high score (`~/.verdant-depths/highscore.json`, floors→rooms→coins sort) |
 | 8 | ✅ done | **Floor expansion** — 7 floors total; per-floor room count `max(5,floor+4)–min(14,floor+6)`; `_spawn_wave` table extended to floors 4–7; `GoblinArcher` floor-scaled; victory/UI strings updated to `/7` |
-| 9 | ✅ done | **New enemies A** — StoneCrawler (armoured melee, deflect shell), VenomfangBat (fast arc mover, applies Poison on contact), CrystalTurret (rotating 3-laser volley, vulnerable from behind); added to `_spawn_wave` floors 4–5; fixed GoblinShaman/AncientTree double HP bar |
+| 9 | ✅ done | **New enemies A** — StoneCrawler (armoured melee, deflect shell), VenomfangBat (fast arc mover, contact damage), CrystalTurret (rotating 3-laser volley, vulnerable from behind); added to `_spawn_wave` floors 4–5; fixed GoblinShaman/AncientTree double HP bar |
 | 10 | ✅ done | **New enemies B** — ShadowWraith (teleporting homing-shot caster), BoneArcher (3-way spread + bone spike every 4th shot), MagmaSlug (slow melee + burn-patch DoT floor hazard), VoidShrieker (death burst + void-flash vignette on attack); added floors 5–7; `BurnPatch` class in `game.py`; homing projectile steering in `_update_playing` |
 | 11 | ✅ done | **Relic system** — `relics.py` (20 relics); `RELIC` state between `FLOOR_CLEAR` and floor advance (pick 1 of 2 cards); `player.relics` list + icon strip in HUD; all 20 relic effects wired (bone_buckler, temporal_blur clones, runic arrows bounce, void core pulse, overcharged quiver, bloodlust speed, curse of greed, echoing shot, leech stone, spiked shell, hunter's mark, shrapnel tips, phase cloak, coin-fed heart, ancient sigil, petrified heart, wardens mark, iron lungs, venom gland, echo chamber) |
-| 12 | 🔜 next | **Status effects** — Poison, Slow, Burn, Stun, Bleed on `Enemy` base class (`tick_status(dt, particles)`) and Burn/Poison on `Player`; coloured status rings in draw; `arrow_poison`, `dash_stun`, `thorns` player flags |
-| 13 | 🔜 | **New bosses** — IronWarden (F4, stomp + shrapnel + charge), AbyssalLeech (F5, HP-stealing tendrils), FungalMatriarch (F6, summon Spore Elders + Bats), VoidSovereign (F7, shrinking void field + 8-way bursts) |
-| 14 | 🔜 | **Room templates + polish** — 3–4 new underground templates (tight corridor, circular pit, asymmetric rubble, flooded chamber); balance pass floors 4–7; menu tagline updated; final high-score `/7` display |
+| 12 | ✅ done | **Status effects** — Poison, Slow, Burn, Stun, Bleed timers on `Enemy` base class; `tick_status(dt, particles)` with DoT every 0.5 s + death on HP ≤ 0; slow via `_move` (×0.4); stun early-returns `update()`; `_draw_status_rings` with colour-coded rings; all 13 enemy `update()` + `draw()` methods wired; Venom Gland poison and Phase Cloak stun now functional; VenomfangBat no longer poisons player (removed) |
+| 13 | ✅ done | **New bosses** — IronWarden (F4: stomp AoE + shrapnel + P2 charge; `_phase2_shake=14`), AbyssalLeech (F5: homing tendril heal + 6-way burst; heals 3 HP per tendril that lands; P2 moves), FungalMatriarch (F6: 5-way spore fan + SporeElder summons + passive 0.5 HP/s aura within 80 px; P2 alternates SporeElder/VenomfangBat summons), VoidSovereign (F7: 5/8-way burst + ShadowWraith/VoidShrieker summons + P2 void-field border shrinks arena; `_phase2_shake=18`); SporeElder elite (8-way simultaneous + 6-spore cloud every 7 s); all wired in `_spawn_boss` floors 4–7; particles.py has 8 new phase2+death emitters |
+| 14 | 🔜 next | **Room templates + polish** — 3–4 new underground templates (tight corridor, circular pit, asymmetric rubble, flooded chamber); balance pass floors 4–7; menu tagline updated; final high-score `/7` display |
 
 ## Controls
 
@@ -230,7 +230,7 @@ Some rooms spawn a single enemy type in large numbers instead of the usual mixed
 | Pack | Enemies | Why it's interesting |
 |---|---|---|
 | Wolf pack | 5–7 Wolves | Coordinated lunge timing overwhelms the player |
-| Bat swarm | 6–8 VenomfangBats | Fast arcs from all sides; constant Poison threat |
+| Bat swarm | 6–8 VenomfangBats | Fast arcs from all sides; hard to dodge at high speed |
 | Turret farm | 3–4 CrystalTurrets | Overlapping rotating-laser coverage |
 | Shrieker choir | 5 VoidShriekers | Layered death bursts punish clustering |
 | Runner mob | 6–8 GoblinRunners | Pure speed; kiting test |
@@ -389,7 +389,7 @@ All new enemies live in `enemies.py`, accept `floor=1` kwarg, follow the existin
 ### VenomfangBat (floor 4+)
 - HP 2, radius 10, speed `160 + (floor-4)*8`
 - Arc movement: `vx/vy` wobbled by `±sin(t * 4) * 120` on the perpendicular axis (same math as Wolf wobble, larger amplitude)
-- On contact: applies **Poison** to player for 3 s; no projectiles
+- On contact: deals 1 damage; no projectiles, no status effect
 - Drops 3 coins
 
 ### CrystalTurret (floor 5+)
@@ -521,11 +521,11 @@ def tick_status(self, dt: float, particles: ParticleSystem) -> None:
 - Stun: yellow ring + orbit particles
 - Bleed: dark-red drip particles emitted every 0.5 s via `particles.emit`
 
-**Player-side status** — `Player` gets `_burn_t` and `_poison_t`; ticked in `Player.update` using the same 0.5 s tick pattern, calling `self.take_damage(dmg_per_tick)`.
+**Player-side status** — no timer-based status on player. Burn is handled entirely by `BurnPatch` floor objects in `game.py` (see MagmaSlug). Player poison was removed.
 
 **Application points:**
-- Arrow collision block in `game.py`: `if player.arrow_poison: enemy._poison_t = 4.0`
-- Enemy contact in `game.py`: VenomfangBat sets `player._poison_t = 3.0`; MagmaSlug burn-patches set `player._burn_t = 2.0`
+- Arrow collision block in `game.py`: `if player.arrow_poison: enemy._poison_t = 4.0` (tags enemy; tick logic is Day 12 work)
+- Player burn: overlap with any live `BurnPatch` accumulates `_burn_dot_acc`; 1 HP/s while standing on a patch; accumulator decays at ×0.5 when clear
 - Phase Cloak relic dash: `for e in enemies: if overlap(player, e): e._stun_t = 0.8`
 
 ## New bosses (Day 13)
@@ -592,7 +592,7 @@ def _phase2(self) -> bool:
 
 ### Key extension points in `game.py`
 - **Arrow-collision block**: where `arrow_poison`, `venom_gland`, `echoing_shot`, `hunter_mark` are checked
-- **Enemy-contact block**: where `player.take_damage` is called — also where VenomfangBat Poison and MagmaSlug Burn are applied to player
+- **Enemy-contact block**: where `player.take_damage` is called — also where MagmaSlug burn patches are queued and drained into `self.burn_patches`
 - **Room-clear block** (`not self.enemies and not dr.cleared`): where `FLOOR_CLEAR` → `RELIC` transition lands
 - **`_commit_transition`**: where `ancient_sigil` i-frames, `coin_floor_reset`, `block_charge` are reset per room
 

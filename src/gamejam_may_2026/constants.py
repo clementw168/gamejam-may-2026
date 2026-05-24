@@ -157,7 +157,6 @@ BAT_HP         = 2
 BAT_RADIUS     = 10
 BAT_SPEED      = 160.0
 BAT_COIN_DROP  = 3
-BAT_POISON_DUR = 3.0     # seconds of poison applied to player on contact
 
 C_BAT      = ( 95,  65, 135)
 C_BAT_DARK = ( 55,  38,  85)
@@ -217,3 +216,53 @@ SHRIEKER_COIN_DROP  = 6
 C_SHRIEKER      = ( 80,  20, 160)
 C_SHRIEKER_DARK = ( 45,  10,  90)
 C_VOID_SHOT     = (130,  30, 240)
+
+# ── Iron Warden (floor 4 boss) ────────────────────────────────────────────────
+WARDEN_HP           = 40
+WARDEN_RADIUS       = 28
+WARDEN_SPEED        = 60.0
+WARDEN_COIN_DROP    = 18
+WARDEN_STOMP_CD     = 4.0
+WARDEN_SHRAPNEL_CD  = 5.0
+WARDEN_CHARGE_CD    = 6.0   # P2 only
+
+C_WARDEN       = (130, 110,  80)
+C_WARDEN_DARK  = ( 75,  62,  42)
+C_WARDEN_SPARK = (220, 185,  80)
+
+# ── Abyssal Leech (floor 5 boss) ─────────────────────────────────────────────
+LEECH_HP          = 35
+LEECH_RADIUS      = 26
+LEECH_COIN_DROP   = 20
+LEECH_TENDRIL_CD  = 6.0
+LEECH_BURST_CD    = 5.0
+LEECH_SPEED_P2    = 30.0
+
+C_LEECH      = ( 28,  75, 100)
+C_LEECH_DARK = ( 14,  42,  60)
+C_LEECH_SHOT = ( 40, 185, 210)
+
+# ── Fungal Matriarch (floor 6 boss) ──────────────────────────────────────────
+MATRIARCH_HP         = 50
+MATRIARCH_RADIUS     = 30
+MATRIARCH_COIN_DROP  = 22
+MATRIARCH_SPORE_CD   = 3.0
+MATRIARCH_SUMMON_CD  = 12.0
+
+C_MATRIARCH       = ( 80, 145,  45)
+C_MATRIARCH_DARK  = ( 45,  88,  22)
+C_MATRIARCH_SPORE = (155, 210,  85)
+
+# ── Void Sovereign (floor 7 boss) ────────────────────────────────────────────
+SOVEREIGN_HP        = 70
+SOVEREIGN_RADIUS    = 25
+SOVEREIGN_SPEED     = 65.0
+SOVEREIGN_COIN_DROP = 30
+SOVEREIGN_BURST_CD  = 1.8
+SOVEREIGN_SUMMON_CD = 8.0
+SOVEREIGN_VOID_GROW = 0.5    # px/s void margin expands per second in P2
+SOVEREIGN_VOID_MAX  = 128.0  # px maximum void margin
+
+C_SOVEREIGN      = ( 18,   4,  45)
+C_SOVEREIGN_DARK = (  8,   2,  22)
+C_SOVEREIGN_SHOT = (130,  55, 255)
