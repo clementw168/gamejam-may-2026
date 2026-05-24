@@ -172,3 +172,48 @@ TURRET_COIN_DROP  = 5
 C_TURRET      = ( 95, 180, 215)
 C_TURRET_DARK = ( 60, 115, 145)
 C_TURRET_BEAM = (175, 230, 255)
+
+# ── Shadow Wraith (floor 5+) ──────────────────────────────────────────────────
+WRAITH_HP            = 4
+WRAITH_RADIUS        = 13
+WRAITH_TELEPORT_CD   = 4.0    # s between teleports
+WRAITH_SHOOT_CD      = 2.0    # s between homing-shot pairs
+WRAITH_COIN_DROP     = 5
+WRAITH_TELEPORT_DIST = 300.0  # minimum distance from player when blinking
+
+C_WRAITH      = ( 75,  40, 120)
+C_WRAITH_DARK = ( 40,  20,  70)
+C_WRAITH_SHOT = (120,  60, 220)
+
+# ── Bone Archer (floor 6+) ────────────────────────────────────────────────────
+BONE_ARCHER_HP        = 4
+BONE_ARCHER_RADIUS    = 12
+BONE_ARCHER_SPEED     = 55.0
+BONE_ARCHER_SHOOT_CD  = 1.4
+BONE_ARCHER_COIN_DROP = 4
+
+C_BONE       = (215, 200, 175)
+C_BONE_DARK  = (155, 138, 112)
+C_BONE_SPIKE = (240, 228, 205)   # slightly brighter for the heavy spike
+
+# ── Magma Slug (floor 6+) ────────────────────────────────────────────────────
+SLUG_HP         = 14
+SLUG_RADIUS     = 16
+SLUG_SPEED      = 45.0
+SLUG_DAMAGE     = 2
+SLUG_COIN_DROP  = 6
+SLUG_DROP_CD    = 0.5   # s between burn-patch drops
+
+C_SLUG       = (195,  80,  25)
+C_SLUG_DARK  = (130,  50,  12)
+C_BURN_PATCH = (210, 100,  20)
+
+# ── Void Shrieker (floor 7) ───────────────────────────────────────────────────
+SHRIEKER_HP         = 3
+SHRIEKER_RADIUS     = 11
+SHRIEKER_SPEED      = 140.0
+SHRIEKER_COIN_DROP  = 6
+
+C_SHRIEKER      = ( 80,  20, 160)
+C_SHRIEKER_DARK = ( 45,  10,  90)
+C_VOID_SHOT     = (130,  30, 240)

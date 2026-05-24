@@ -29,6 +29,7 @@ from gamejam_may_2026.dungeon import Dungeon, DungeonRoom
 from gamejam_may_2026.enemies import (
     Enemy, GoblinArcher, GoblinRunner, SporePlant, Wolf,
     StoneCrawler, VenomfangBat, CrystalTurret,
+    ShadowWraith, BoneArcher, MagmaSlug, VoidShrieker,
 )
 from gamejam_may_2026.particles import ParticleSystem
 from gamejam_may_2026.perks import Perk, PERK_POOL
@@ -232,6 +233,46 @@ class Chest:
             surf.blit(lbl, (sx - lbl.get_width() // 2, sy - h // 2 - 14))
 
 
+# ── Burn Patch (left by MagmaSlug) ────────────────────────────────────────────
+
+class BurnPatch:
+    """A smouldering patch of magma left by a MagmaSlug.
+
+    Deals 1 damage per second to the player while they stand inside it.
+    Fades visually as it expires.
+    """
+    RADIUS:   float = 20.0
+    LIFETIME: float = 4.0
+
+    def __init__(self, x: float, y: float) -> None:
+        self.x    = x
+        self.y    = y
+        self._age = 0.0
+        self.alive = True
+
+    def update(self, dt: float, player: Player) -> bool:
+        """Tick; return True if the player overlaps (for DoT application)."""
+        self._age += dt
+        if self._age >= self.LIFETIME:
+            self.alive = False
+            return False
+        dx = player.x - self.x
+        dy = player.y - self.y
+        return (dx * dx + dy * dy) < (self.RADIUS + C.PLAYER_RADIUS) ** 2
+
+    def draw(self, surf: pygame.Surface, camera: Camera) -> None:
+        sx, sy = camera.apply_pos(self.x, self.y)
+        sx, sy = round(sx), round(sy)
+        frac   = max(0.0, 1.0 - self._age / self.LIFETIME)   # 1 → 0 as it fades
+        alpha  = int(frac * 160)
+        r      = round(self.RADIUS * (0.6 + frac * 0.4))
+        glow   = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+        # Inner bright core
+        pygame.draw.circle(glow, (*C.C_BURN_PATCH, alpha),      (r, r), r)
+        pygame.draw.circle(glow, (*C.C_SLUG, min(255, alpha + 30)), (r, r), max(1, r - 5))
+        surf.blit(glow, (sx - r, sy - r))
+
+
 # ── Spawn wave ─────────────────────────────────────────────────────────────────
 
 def _spawn_wave(room: Room, floor: int, room_num: int = 1) -> list[Enemy]:
@@ -243,28 +284,41 @@ def _spawn_wave(room: Room, floor: int, room_num: int = 1) -> list[Enemy]:
     wolves   = (1, 1, 2, 2, 2, 3, 3)[fl - 1]
     archers  = (1, 2, 2, 3, 3, 4, 4)[fl - 1] if depth >= 2 else 0
     plants   = (1, 1, 2, 2, 3, 3, 4)[fl - 1] if depth >= 3 else 0
-    crawlers = (0, 0, 0, 1, 1, 2, 2)[fl - 1]   # floor 4+ — armoured melee
-    bats     = (0, 0, 0, 1, 2, 2, 3)[fl - 1]   # floor 4+ — fast arc mover
-    turrets  = (0, 0, 0, 0, 1, 1, 2)[fl - 1]   # floor 5+ — stationary, directional
+    crawlers     = (0, 0, 0, 1, 1, 2, 2)[fl - 1]   # floor 4+ — armoured melee
+    bats         = (0, 0, 0, 1, 2, 2, 3)[fl - 1]   # floor 4+ — fast arc mover
+    turrets      = (0, 0, 0, 0, 1, 1, 2)[fl - 1]   # floor 5+ — stationary, directional
+    wraiths      = (0, 0, 0, 0, 1, 1, 2)[fl - 1]   # floor 5+ — teleporting caster
+    bone_archers = (0, 0, 0, 0, 0, 1, 2)[fl - 1]   # floor 6+ — 3-way spread + bone spike
+    slugs        = (0, 0, 0, 0, 0, 1, 1)[fl - 1]   # floor 6+ — slow melee + burn patches
+    shriekers    = (0, 0, 0, 0, 0, 0, 1)[fl - 1]   # floor 7  — death burst + void flash
 
-    total = runners + wolves + archers + plants + crawlers + bats + turrets
+    total = (runners + wolves + archers + plants + crawlers + bats + turrets
+             + wraiths + bone_archers + slugs + shriekers)
     positions = room.get_spawn_positions(total)
     idx  = 0
     wave: list[Enemy] = []
     for _ in range(runners):
-        if idx < len(positions): wave.append(GoblinRunner(*positions[idx], floor=floor));  idx += 1
+        if idx < len(positions): wave.append(GoblinRunner(*positions[idx], floor=floor));    idx += 1
     for _ in range(wolves):
-        if idx < len(positions): wave.append(Wolf(*positions[idx], floor=floor));          idx += 1
+        if idx < len(positions): wave.append(Wolf(*positions[idx], floor=floor));            idx += 1
     for _ in range(archers):
-        if idx < len(positions): wave.append(GoblinArcher(*positions[idx], floor=floor));  idx += 1
+        if idx < len(positions): wave.append(GoblinArcher(*positions[idx], floor=floor));    idx += 1
     for _ in range(plants):
-        if idx < len(positions): wave.append(SporePlant(*positions[idx], floor=floor));    idx += 1
+        if idx < len(positions): wave.append(SporePlant(*positions[idx], floor=floor));      idx += 1
     for _ in range(crawlers):
-        if idx < len(positions): wave.append(StoneCrawler(*positions[idx], floor=floor));  idx += 1
+        if idx < len(positions): wave.append(StoneCrawler(*positions[idx], floor=floor));    idx += 1
     for _ in range(bats):
-        if idx < len(positions): wave.append(VenomfangBat(*positions[idx], floor=floor));  idx += 1
+        if idx < len(positions): wave.append(VenomfangBat(*positions[idx], floor=floor));    idx += 1
     for _ in range(turrets):
-        if idx < len(positions): wave.append(CrystalTurret(*positions[idx], floor=floor)); idx += 1
+        if idx < len(positions): wave.append(CrystalTurret(*positions[idx], floor=floor));   idx += 1
+    for _ in range(wraiths):
+        if idx < len(positions): wave.append(ShadowWraith(*positions[idx], floor=floor));    idx += 1
+    for _ in range(bone_archers):
+        if idx < len(positions): wave.append(BoneArcher(*positions[idx], floor=floor));      idx += 1
+    for _ in range(slugs):
+        if idx < len(positions): wave.append(MagmaSlug(*positions[idx], floor=floor));       idx += 1
+    for _ in range(shriekers):
+        if idx < len(positions): wave.append(VoidShrieker(*positions[idx], floor=floor));    idx += 1
     return wave
 
 
@@ -311,6 +365,7 @@ class Game:
         self.enemy_projectiles: list[EnemyProjectile]  = []
         self.coins:             list[Coin]             = []
         self.chests:            list[Chest]            = []
+        self.burn_patches:      list[BurnPatch]        = []
 
         # Transition state
         self._trans_t:        float                    = 0.0
@@ -339,6 +394,9 @@ class Game:
 
         # Pause state
         self._pre_pause_state: str = "PLAYING"
+
+        # VoidShrieker void-flash vignette
+        self._void_flash_t: float = 0.0
 
         # Run statistics (accumulate across floors)
         self._run_start:            float = time.monotonic()
@@ -514,10 +572,13 @@ class Game:
         self.enemy_projectiles = []
         self.coins             = []
         self.chests            = []
+        self.burn_patches      = []
         self.camera            = Camera()
         self._boss_hint_t      = 0.0
         self._show_staircase   = False
         self._staircase_t      = 0.0
+        self._void_flash_t     = 0.0
+        self._burn_dot_acc     = 0.0
         self.state             = "PLAYING"
 
     # ── Boss-gate helpers ─────────────────────────────────────────────────────
@@ -557,6 +618,7 @@ class Game:
         self.camera.update(dt)
         if self._show_staircase:
             self._staircase_t += dt
+        self._void_flash_t = max(0.0, self._void_flash_t - dt)
         if self.state == "PLAYING":
             self._update_playing(dt)
         elif self.state == "FLOOR_CLEAR":
@@ -623,6 +685,46 @@ class Game:
                 q.clear()
         self.enemies.extend(new_summons)
 
+        # Drain MagmaSlug burn-patch queues → BurnPatch objects
+        for e in self.enemies:
+            pq = getattr(e, '_patch_queue', None)
+            if pq:
+                for px2, py2 in pq:
+                    self.burn_patches.append(BurnPatch(px2, py2))
+                pq.clear()
+
+        # Drain VoidShrieker hit-shake and death-burst queues
+        for e in self.enemies:
+            if getattr(e, '_hit_shake', False):
+                e._hit_shake = False                               # type: ignore[attr-defined]
+                self.camera.add_shake(4)
+                self._void_flash_t = max(self._void_flash_t, 0.25)
+            dps = getattr(e, '_death_projs', None)
+            if dps:
+                self.enemy_projectiles.extend(dps)
+                dps.clear()
+
+        # Steer homing projectiles toward player before advancing them
+        for ep in self.enemy_projectiles:
+            if getattr(ep, 'homing', False):
+                dx2 = self.player.x - ep.x
+                dy2 = self.player.y - ep.y
+                dist2 = math.hypot(dx2, dy2) or 1.0
+                tx = dx2 / dist2
+                ty = dy2 / dist2
+                spd = math.hypot(ep.vx, ep.vy) or 1.0
+                cx2 = ep.vx / spd
+                cy2 = ep.vy / spd
+                turn = math.radians(180.0 * dt)   # max turn per frame
+                # Rotate current direction by up to `turn` radians toward target
+                cross = cx2 * ty - cy2 * tx
+                dot   = cx2 * tx  + cy2 * ty
+                angle  = math.atan2(cross, dot)
+                angle  = max(-turn, min(turn, angle))
+                cos_a, sin_a = math.cos(angle), math.sin(angle)
+                ep.vx = (cx2 * cos_a - cy2 * sin_a) * spd
+                ep.vy = (cx2 * sin_a + cy2 * cos_a) * spd
+
         for ep in self.enemy_projectiles:
             ep.update(dt, room)
 
@@ -669,6 +771,13 @@ class Game:
                     self.particles.emit_player_hurt(self.player.x, self.player.y)
                     self.camera.add_shake(6)
 
+        # Drain any VoidShrieker death-burst projectiles triggered by arrow kills
+        for e in self.enemies:
+            dps = getattr(e, '_death_projs', None)
+            if dps:
+                self.enemy_projectiles.extend(dps)
+                dps.clear()
+
         self.enemies           = [e  for e  in self.enemies           if e.alive]
         self.enemy_projectiles = [ep for ep in self.enemy_projectiles if ep.alive]
 
@@ -678,6 +787,24 @@ class Game:
                 sounds.play("coin")
                 self._coins_collected_total += 1
         self.coins = [c for c in self.coins if not c.collected]
+
+        # ── Burn patches (MagmaSlug DoT floor hazard) ─────────────────────────
+        _burn_dot_acc = getattr(self, '_burn_dot_acc', 0.0)
+        _burn_overlap = False
+        for patch in self.burn_patches:
+            if patch.update(dt, self.player):
+                _burn_overlap = True
+        if _burn_overlap:
+            _burn_dot_acc += dt
+            if _burn_dot_acc >= 1.0:
+                _burn_dot_acc -= 1.0
+                if self.player.take_damage(1):
+                    self.particles.emit_player_hurt(self.player.x, self.player.y)
+                    self.camera.add_shake(4)
+        else:
+            _burn_dot_acc = max(0.0, _burn_dot_acc - dt * 0.5)   # decay accumulator when clear
+        self._burn_dot_acc = _burn_dot_acc
+        self.burn_patches = [bp for bp in self.burn_patches if bp.alive]
 
         # ── Chests ────────────────────────────────────────────────────────────
         for chest in self.chests:
@@ -794,7 +921,8 @@ class Game:
             self.room_num += 1
         next_dr.visited = True
         self.dungeon.current = next_dr
-        self.chests.clear()   # chests belong to the room we just left
+        self.chests.clear()           # chests belong to the room we just left
+        self.burn_patches.clear()     # burn patches belong to the room we just left
 
         # Convert player from world-space back to local room coords
         self.player.x -= self._trans_wdx
@@ -928,6 +1056,8 @@ class Game:
                 cam.offset.x, cam.offset.y,
             )
 
+        for patch in self.burn_patches:
+            patch.draw(self.screen, cam)
         for coin in self.coins:
             coin.draw(self.screen, cam)
         for chest in self.chests:
@@ -941,6 +1071,18 @@ class Game:
             ep.draw(self.screen, cam)
         self.player.draw(self.screen, cam)
         self.particles.draw(self.screen, cam.offset.x, cam.offset.y)
+
+        # Void flash vignette (VoidShrieker hit/attack feedback)
+        if self._void_flash_t > 0:
+            alpha = int(self._void_flash_t / 0.25 * 130)
+            vignette = pygame.Surface((C.SCREEN_W, C.PLAYFIELD_H), pygame.SRCALPHA)
+            edge = 40   # border thickness
+            border_col = (20, 0, 45, min(255, alpha))
+            pygame.draw.rect(vignette, border_col, (0, 0, C.SCREEN_W, edge))
+            pygame.draw.rect(vignette, border_col, (0, C.PLAYFIELD_H - edge, C.SCREEN_W, edge))
+            pygame.draw.rect(vignette, border_col, (0, edge, edge, C.PLAYFIELD_H - 2 * edge))
+            pygame.draw.rect(vignette, border_col, (C.SCREEN_W - edge, edge, edge, C.PLAYFIELD_H - 2 * edge))
+            self.screen.blit(vignette, (0, 0))
 
     def _draw_transitioning(self) -> None:
         ox = round(self.camera.offset.x)

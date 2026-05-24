@@ -1080,3 +1080,374 @@ class CrystalTurret(Enemy):
             pygame.draw.rect(surf, (20, 30, 40), (bx2, by2, bw, 4))
             fill = round(bw * self.hp / self.max_hp)
             pygame.draw.rect(surf, C.C_TURRET, (bx2, by2, fill, 4))
+
+
+# ── Shadow Wraith (floor 5+) ──────────────────────────────────────────────────
+
+
+class ShadowWraith(Enemy):
+    """Teleporting caster — blinks to a far tile every 4 s, fires homing shot pairs."""
+
+    _DEATH_COLOR_A = C.C_WRAITH
+    _DEATH_COLOR_B = (155, 80, 240)
+
+    def __init__(self, x: float, y: float, *, floor: int = 1) -> None:
+        super().__init__(x, y, hp=C.WRAITH_HP, radius=C.WRAITH_RADIUS,
+                         speed=0.0, coin_drop=C.WRAITH_COIN_DROP)
+        self._teleport_cd = random.uniform(1.0, C.WRAITH_TELEPORT_CD)
+        self._shoot_cd    = random.uniform(0.5, C.WRAITH_SHOOT_CD)
+        self._blink_t     = 0.0   # post-teleport flash timer
+        self._pulse_t     = random.uniform(0.0, 6.28)
+
+    def update(
+        self,
+        dt: float,
+        player: Player,
+        room: Room,
+        particles: ParticleSystem,
+        projs: list[EnemyProjectile],
+    ) -> None:
+        if not self.alive:
+            return
+        self._iframes  = max(0.0, self._iframes  - dt)
+        self._flash    = max(0.0, self._flash    - dt)
+        self._blink_t  = max(0.0, self._blink_t  - dt)
+        self._pulse_t += dt * 2.0
+
+        # ── Teleport ──────────────────────────────────────────────────────────
+        self._teleport_cd -= dt
+        if self._teleport_cd <= 0:
+            candidates: list[tuple[float, float]] = []
+            ts = C.TILE_SIZE
+            for ty in range(1, C.ROOM_TILE_H - 1):
+                for tx in range(1, C.ROOM_TILE_W - 1):
+                    if room.tiles[ty][tx] == C.TILE_FLOOR:
+                        wx = tx * ts + ts // 2
+                        wy = ty * ts + ts // 2
+                        if math.hypot(wx - player.x, wy - player.y) > C.WRAITH_TELEPORT_DIST:
+                            candidates.append((float(wx), float(wy)))
+            if candidates:
+                self.x, self.y = random.choice(candidates)
+                self._blink_t = 0.38
+                particles.emit_enemy_hit(self.x, self.y)
+            self._teleport_cd = C.WRAITH_TELEPORT_CD
+
+        # ── Homing shots ──────────────────────────────────────────────────────
+        self._shoot_cd -= dt
+        if self._shoot_cd <= 0:
+            dx = player.x - self.x
+            dy = player.y - self.y
+            base_a = math.atan2(dy, dx)
+            for off in (-math.radians(30), math.radians(30)):
+                ep = EnemyProjectile(
+                    self.x, self.y, base_a + off,
+                    speed=175, color=C.C_WRAITH_SHOT, damage=1, lifetime=4.5,
+                )
+                ep.homing = True   # game.py will steer this each frame
+                projs.append(ep)
+            self._shoot_cd = C.WRAITH_SHOOT_CD
+
+    def draw(self, surf: pygame.Surface, camera: Camera) -> None:
+        sx, sy = camera.apply_pos(self.x, self.y)
+        sx, sy = round(sx), round(sy)
+        r = self.radius
+        pulse = (math.sin(self._pulse_t) + 1.0) * 0.5
+
+        # Post-teleport blink halo
+        if self._blink_t > 0:
+            a     = int(self._blink_t / 0.38 * 200)
+            ring_r = r + 10
+            blink  = pygame.Surface((ring_r * 2, ring_r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(blink, (180, 100, 255, a), (ring_r, ring_r), ring_r)
+            surf.blit(blink, (sx - ring_r, sy - ring_r))
+
+        # Pulsing outer ring
+        ring_r = r + 3 + round(pulse * 4)
+        pygame.draw.circle(surf, C.C_WRAITH_DARK, (sx, sy), ring_r, 2)
+
+        # Shadow + body
+        pygame.draw.circle(surf, (8, 8, 8), (sx + 1, sy + 3), r - 1)
+        color = (255, 255, 255) if self._flash > 0 else C.C_WRAITH
+        pygame.draw.circle(surf, color, (sx, sy), r)
+        if self._flash <= 0:
+            pygame.draw.circle(surf, C.C_WRAITH_DARK, (sx, sy + r // 3), r // 2)
+            # Glowing eyes
+            for ex in (-4, 4):
+                pygame.draw.circle(surf, (160, 60, 255), (sx + ex, sy - 3), 3)
+                pygame.draw.circle(surf, (225, 185, 255), (sx + ex, sy - 3), 1)
+
+        # HP bar
+        if self.hp < self.max_hp:
+            bw = r * 2
+            bx2, by2 = sx - r, sy - r - 7
+            pygame.draw.rect(surf, (20, 5, 40),    (bx2, by2, bw, 4))
+            fill = round(bw * self.hp / self.max_hp)
+            pygame.draw.rect(surf, C.C_WRAITH_SHOT, (bx2, by2, fill, 4))
+
+
+# ── Bone Archer (floor 6+) ────────────────────────────────────────────────────
+
+
+class BoneArcher(Enemy):
+    """Ranged skeleton — fires a 3-way spread; every 4th shot is a slow heavy spike."""
+
+    _DEATH_COLOR_A = C.C_BONE
+    _DEATH_COLOR_B = (240, 225, 200)
+
+    _WIND_DUR  = 0.4
+    _PREF_DIST = 240.0
+
+    def __init__(self, x: float, y: float, *, floor: int = 1) -> None:
+        hp = C.BONE_ARCHER_HP + max(0, floor - 6) * 2
+        super().__init__(x, y, hp=hp, radius=C.BONE_ARCHER_RADIUS,
+                         speed=C.BONE_ARCHER_SPEED, coin_drop=C.BONE_ARCHER_COIN_DROP)
+        self._shoot_cd   = random.uniform(0.5, C.BONE_ARCHER_SHOOT_CD)
+        self._shot_count = 0
+        self._winding    = False
+        self._wind_up    = 0.0
+
+    def update(
+        self,
+        dt: float,
+        player: Player,
+        room: Room,
+        particles: ParticleSystem,
+        projs: list[EnemyProjectile],
+    ) -> None:
+        if not self.alive:
+            return
+        self._iframes = max(0.0, self._iframes - dt)
+        self._flash   = max(0.0, self._flash   - dt)
+
+        dx = player.x - self.x
+        dy = player.y - self.y
+        dist = math.hypot(dx, dy)
+
+        # Maintain preferred range
+        if dist < self._PREF_DIST * 0.7 and dist > 0:
+            self._move(-dx / dist * self.speed * dt, -dy / dist * self.speed * dt, room)
+        elif dist > self._PREF_DIST * 1.3 and dist > 0:
+            self._move(dx / dist * self.speed * 0.6 * dt, dy / dist * self.speed * 0.6 * dt, room)
+
+        self._shoot_cd -= dt
+        if self._shoot_cd <= self._WIND_DUR and not self._winding:
+            self._winding = True
+            self._wind_up = 0.0
+
+        if self._winding:
+            self._wind_up += dt
+            if self._wind_up >= self._WIND_DUR:
+                self._shot_count += 1
+                base_a = math.atan2(dy, dx)
+                if self._shot_count % 4 == 0:
+                    # Heavy bone spike — single slow projectile, 2 damage
+                    projs.append(EnemyProjectile(
+                        self.x, self.y, base_a,
+                        speed=140, color=C.C_BONE_SPIKE, damage=2, lifetime=3.5,
+                    ))
+                else:
+                    # Standard 3-way spread
+                    spread = math.radians(20)
+                    for off in (-spread, 0.0, spread):
+                        projs.append(EnemyProjectile(
+                            self.x, self.y, base_a + off,
+                            speed=195, color=C.C_BONE, damage=1, lifetime=2.2,
+                        ))
+                sounds.play("spore_shoot")
+                self._shoot_cd = C.BONE_ARCHER_SHOOT_CD
+                self._winding  = False
+                self._wind_up  = 0.0
+
+    def draw(self, surf: pygame.Surface, camera: Camera) -> None:
+        if self._winding:
+            sx0, sy0 = camera.apply_pos(self.x, self.y)
+            frac  = min(1.0, self._wind_up / self._WIND_DUR)
+            pulse = min(255, int(frac * 255))
+            is_spike = (self._shot_count + 1) % 4 == 0
+            col = (255, 255, 255) if not is_spike else (255, 230, 180)
+            pygame.draw.circle(surf, (pulse, int(pulse * col[1] / 255),
+                                      int(pulse * col[2] / 255)),
+                               (round(sx0), round(sy0)), self.radius + 7, 2)
+
+        sx, sy = self._draw_body(surf, camera, C.C_BONE, C.C_BONE_DARK)
+        if self._flash <= 0:
+            # Dark hollow eye sockets
+            for ex in (-4, 4):
+                pygame.draw.circle(surf, (10, 10, 10),       (sx + ex, sy - 3), 3)
+                pygame.draw.circle(surf, (200, 185, 155), (sx + ex, sy - 3), 1)
+
+
+# ── Magma Slug (floor 6+) ─────────────────────────────────────────────────────
+
+
+class MagmaSlug(Enemy):
+    """Slow armoured melee chaser — leaves a trail of burn patches every 0.5 s.
+    game.py drains `_patch_queue` each frame and creates BurnPatch objects."""
+
+    _DEATH_COLOR_A = C.C_SLUG
+    _DEATH_COLOR_B = (240, 130, 40)
+
+    def __init__(self, x: float, y: float, *, floor: int = 1) -> None:
+        hp = C.SLUG_HP + max(0, floor - 6) * 3
+        super().__init__(x, y, hp=hp, radius=C.SLUG_RADIUS,
+                         speed=C.SLUG_SPEED, coin_drop=C.SLUG_COIN_DROP)
+        self._contact_cd = 0.0
+        self._drop_cd    = C.SLUG_DROP_CD
+        self._patch_queue: list[tuple[float, float]] = []   # drained by game.py
+        self._pulse_t    = random.uniform(0.0, 6.28)
+
+    def update(
+        self,
+        dt: float,
+        player: Player,
+        room: Room,
+        particles: ParticleSystem,
+        _projs: list[EnemyProjectile],
+    ) -> None:
+        if not self.alive:
+            return
+        self._iframes    = max(0.0, self._iframes    - dt)
+        self._flash      = max(0.0, self._flash      - dt)
+        self._contact_cd = max(0.0, self._contact_cd - dt)
+        self._pulse_t   += dt * 2.5
+
+        dx = player.x - self.x
+        dy = player.y - self.y
+        dist = math.hypot(dx, dy)
+        if dist > 0:
+            self._move(dx / dist * self.speed * dt, dy / dist * self.speed * dt, room)
+
+        if self._contact_cd <= 0:
+            if math.hypot(player.x - self.x, player.y - self.y) < self.radius + player.radius:
+                if player.take_damage(C.SLUG_DAMAGE):
+                    particles.emit_player_hurt(player.x, player.y)
+                self._contact_cd = 0.6
+
+        # Queue a burn patch at current position
+        self._drop_cd = max(0.0, self._drop_cd - dt)
+        if self._drop_cd <= 0:
+            self._patch_queue.append((self.x, self.y))
+            self._drop_cd = C.SLUG_DROP_CD
+
+    def draw(self, surf: pygame.Surface, camera: Camera) -> None:
+        sx, sy = camera.apply_pos(self.x, self.y)
+        sx, sy = round(sx), round(sy)
+        r = self.radius
+        pulse = (math.sin(self._pulse_t) + 1.0) * 0.5
+
+        # Lava glow halo
+        gr = r + 4 + round(pulse * 4)
+        gc = (min(255, 185 + round(pulse * 40)), min(255, 65 + round(pulse * 35)), 12)
+        pygame.draw.circle(surf, gc, (sx, sy), gr, 3)
+
+        # Shadow + body
+        pygame.draw.circle(surf, (8, 8, 8), (sx + 3, sy + 5), r - 2)
+        color = (255, 255, 255) if self._flash > 0 else C.C_SLUG
+        pygame.draw.circle(surf, color, (sx, sy), r)
+        if self._flash <= 0:
+            pygame.draw.circle(surf, C.C_SLUG_DARK, (sx, sy + r // 3), r // 2)
+            # Animated lava cracks
+            for i in range(3):
+                a  = math.radians(55 + i * 90 + self._pulse_t * 8)
+                lx = sx + round(math.cos(a) * r * 0.6)
+                ly = sy + round(math.sin(a) * r * 0.6)
+                cc = (min(255, 230 + round(pulse * 25)),
+                      min(255, 85  + round(pulse * 40)), 8)
+                pygame.draw.line(surf, cc, (sx, sy), (lx, ly), 1)
+
+        # HP bar
+        if self.hp < self.max_hp:
+            bw = r * 2
+            bx2, by2 = sx - r, sy - r - 8
+            pygame.draw.rect(surf, (40, 10, 0), (bx2, by2, bw, 4))
+            fill = round(bw * self.hp / self.max_hp)
+            pygame.draw.rect(surf, C.C_SLUG, (bx2, by2, fill, 4))
+
+
+# ── Void Shrieker (floor 7) ───────────────────────────────────────────────────
+
+
+class VoidShrieker(Enemy):
+    """Fast erratic screamer — explodes into a 8-way ring of projectiles on death.
+    Signals game.py via `_hit_shake = True` whenever it deals contact damage."""
+
+    _DEATH_COLOR_A = C.C_SHRIEKER
+    _DEATH_COLOR_B = (165, 55, 255)
+
+    def __init__(self, x: float, y: float, *, floor: int = 1) -> None:
+        super().__init__(x, y, hp=C.SHRIEKER_HP, radius=C.SHRIEKER_RADIUS,
+                         speed=C.SHRIEKER_SPEED, coin_drop=C.SHRIEKER_COIN_DROP)
+        self._t          = random.uniform(0.0, 6.28)
+        self._contact_cd = 0.0
+        self._hit_shake  = False   # game.py reads and clears this
+        self._death_projs: list[EnemyProjectile] = []
+
+    def take_hit(self, damage: int, particles: ParticleSystem) -> None:
+        super().take_hit(damage, particles)
+        if not self.alive:
+            # Death burst: 8 EnemyProjectiles in a full ring
+            for i in range(8):
+                a = math.radians(i * 45.0)
+                self._death_projs.append(EnemyProjectile(
+                    self.x, self.y, a,
+                    speed=195, color=C.C_VOID_SHOT, damage=1, lifetime=2.2,
+                ))
+
+    def update(
+        self,
+        dt: float,
+        player: Player,
+        room: Room,
+        particles: ParticleSystem,
+        _projs: list[EnemyProjectile],
+    ) -> None:
+        if not self.alive:
+            return
+        self._iframes    = max(0.0, self._iframes    - dt)
+        self._flash      = max(0.0, self._flash      - dt)
+        self._contact_cd = max(0.0, self._contact_cd - dt)
+        self._t         += dt
+
+        dx = player.x - self.x
+        dy = player.y - self.y
+        dist = math.hypot(dx, dy)
+        if dist > 0:
+            nx, ny = dx / dist, dy / dist
+            wobble = math.sin(self._t * 5.5) * 0.55
+            mx = nx + (-ny * wobble)
+            my = ny + ( nx * wobble)
+            mag = math.hypot(mx, my) or 1.0
+            self._move(mx / mag * self.speed * dt, my / mag * self.speed * dt, room)
+
+        if self._contact_cd <= 0:
+            if math.hypot(player.x - self.x, player.y - self.y) < self.radius + player.radius:
+                if player.take_damage(1):
+                    particles.emit_player_hurt(player.x, player.y)
+                    self._hit_shake = True   # game.py reads this to shake camera
+                self._contact_cd = 0.4
+
+    def draw(self, surf: pygame.Surface, camera: Camera) -> None:
+        sx, sy = camera.apply_pos(self.x, self.y)
+        sx, sy = round(sx), round(sy)
+        r = self.radius
+
+        # Void ripple ring (animated)
+        ripple_r = r + 4 + round(abs(math.sin(self._t * 6.0)) * 5)
+        pygame.draw.circle(surf, C.C_SHRIEKER, (sx, sy), ripple_r, 1)
+
+        # Shadow + body
+        pygame.draw.circle(surf, (8, 8, 8), (sx + 1, sy + 2), r - 1)
+        color = (255, 255, 255) if self._flash > 0 else C.C_SHRIEKER
+        pygame.draw.circle(surf, color, (sx, sy), r)
+        if self._flash <= 0:
+            pygame.draw.circle(surf, C.C_SHRIEKER_DARK, (sx, sy + r // 3), r // 2)
+            # Screaming mouth
+            pygame.draw.ellipse(surf, (10, 5, 20), (sx - 4, sy, 8, 5))
+
+        # HP bar
+        if self.hp < self.max_hp:
+            bw = r * 2
+            bx2, by2 = sx - r, sy - r - 6
+            pygame.draw.rect(surf, (20, 5, 35), (bx2, by2, bw, 4))
+            fill = round(bw * self.hp / self.max_hp)
+            pygame.draw.rect(surf, C.C_SHRIEKER, (bx2, by2, fill, 4))

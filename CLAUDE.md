@@ -64,6 +64,10 @@ uv run verdant-depths [--keys arrows|wasd|zqsd]
 | **StoneCrawler** | melee chaser | **4+** | Armoured: first 3 arrow hits deflected (shell ring + pips); 2 dmg/contact; HP 8+; drops 4 coins |
 | **VenomfangBat** | fast melee | **4+** | Arc wobble movement (120 px/s perp.); poisons player for 3 s on contact; HP 2; drops 3 coins |
 | **CrystalTurret** | stationary ranged | **5+** | Rotating 3-way crystal volleys; immune from front ±60°, double damage from back; HP 10+; drops 5 coins |
+| **ShadowWraith** | teleporting caster | **5+** | Teleports every 4 s (>300 px from player); fires 2-way homing projectiles; HP 4; drops 5 coins |
+| **BoneArcher** | ranged | **6+** | 3-way spread every 1.4 s; every 4th shot is a slow bone spike (dmg 2); HP 4+; drops 4 coins |
+| **MagmaSlug** | slow melee | **6+** | 2 dmg contact; drops orange burn patches every 0.5 s (1 dmg/s while standing); HP 14+; drops 6 coins |
+| **VoidShrieker** | fast melee | **7** | Erratic high-speed movement; void flash + camera shake on attack; 8-way death burst; HP 3; drops 6 coins |
 | **GoblinShaman** | **boss** | **1–2** | Bolt bursts + minion summons; 2 phases; see below |
 | **AncientTree** | **boss** | **3** | Root volleys + thorn rings; 2 phases; see below |
 
@@ -128,8 +132,8 @@ Override any track: drop `<name>.ogg` (or `.wav`) in `src/gamejam_may_2026/asset
 | 7 | ✅ done | Main menu (title + controls + best run), run-summary death/victory screens (floor/rooms/coins/time), high score (`~/.verdant-depths/highscore.json`, floors→rooms→coins sort) |
 | 8 | ✅ done | **Floor expansion** — 7 floors total; per-floor room count `max(5,floor+4)–min(14,floor+6)`; `_spawn_wave` table extended to floors 4–7; `GoblinArcher` floor-scaled; victory/UI strings updated to `/7` |
 | 9 | ✅ done | **New enemies A** — StoneCrawler (armoured melee, deflect shell), VenomfangBat (fast arc mover, applies Poison on contact), CrystalTurret (rotating 3-laser volley, vulnerable from behind); added to `_spawn_wave` floors 4–5; fixed GoblinShaman/AncientTree double HP bar |
-| 10 | 🔜 next | **New enemies B** — ShadowWraith (teleporting homing-shot caster), BoneArcher (3-way spread + alternating bone spike), MagmaSlug (slow melee + burn-trail patches), VoidShrieker (death burst, camera shake on attack); added floors 5–7 |
-| 11 | 🔜 | **Relic system** — `relics.py` (20 relics, `Relic` dataclass with `apply(player)`); `RELIC` state between `FLOOR_CLEAR` and floor advance (pick 1 of 2 cards); `player.relics` list; relic icon strip in HUD |
+| 10 | ✅ done | **New enemies B** — ShadowWraith (teleporting homing-shot caster), BoneArcher (3-way spread + bone spike every 4th shot), MagmaSlug (slow melee + burn-patch DoT floor hazard), VoidShrieker (death burst + void-flash vignette on attack); added floors 5–7; `BurnPatch` class in `game.py`; homing projectile steering in `_update_playing` |
+| 11 | 🔜 next | **Relic system** — `relics.py` (20 relics, `Relic` dataclass with `apply(player)`); `RELIC` state between `FLOOR_CLEAR` and floor advance (pick 1 of 2 cards); `player.relics` list; relic icon strip in HUD |
 | 12 | 🔜 | **Status effects** — Poison, Slow, Burn, Stun, Bleed on `Enemy` base class (`tick_status(dt, particles)`) and Burn/Poison on `Player`; coloured status rings in draw; `arrow_poison`, `dash_stun`, `thorns` player flags |
 | 13 | 🔜 | **New bosses** — IronWarden (F4, stomp + shrapnel + charge), AbyssalLeech (F5, HP-stealing tendrils), FungalMatriarch (F6, summon Spore Elders + Bats), VoidSovereign (F7, shrinking void field + 8-way bursts) |
 | 14 | 🔜 | **Room templates + polish** — 3–4 new underground templates (tight corridor, circular pit, asymmetric rubble, flooded chamber); balance pass floors 4–7; menu tagline updated; final high-score `/7` display |
