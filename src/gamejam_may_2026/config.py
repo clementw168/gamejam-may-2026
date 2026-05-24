@@ -1,10 +1,17 @@
 """Runtime config — key layout and other tweakable settings.
 
-Changed by main.py before the game starts (e.g. via --keys flag).
+Changed by main.py before the game starts (e.g. via --keys / --debug flags).
 """
 
 from __future__ import annotations
 import pygame
+
+# ── Debug mode ───────────────────────────────────────────────────────────────
+# Enabled by --debug CLI flag.  Activates:
+#   • Infinite dash (cooldown reset to 0 every frame)
+#   • HP floor of 1 (player can never die)
+#   • K key → instantly kill all enemies in the current room
+DEBUG: bool = False
 
 # ── Key layout ────────────────────────────────────────────────────────────────
 # Valid values: "arrows" | "wasd" | "zqsd"

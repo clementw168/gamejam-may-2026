@@ -1,6 +1,7 @@
 """HUD — hearts, coin counter, floor info, death/upgrade overlays."""
 
 from __future__ import annotations
+import math
 import pygame
 from gamejam_may_2026 import constants as C
 
@@ -9,6 +10,7 @@ if TYPE_CHECKING:
     from gamejam_may_2026.player import Player
     from gamejam_may_2026.dungeon import Dungeon
     from gamejam_may_2026.perks import Perk
+    from gamejam_may_2026.camera import Camera
 
 # ── Font cache ────────────────────────────────────────────────────────────────
 _fonts: dict[tuple, pygame.font.Font] = {}
@@ -38,6 +40,7 @@ def draw_hud(
     floor_num: int = 1,
     room_num: int = 1,
     enemies_left: int = 0,
+    debug: bool = False,
 ) -> None:
     # Background strip
     hud_y = C.PLAYFIELD_H
@@ -75,6 +78,11 @@ def draw_hud(
     # ── Dash cooldown hint ────────────────────────────────────────────────────
     hint = _font(13).render("[SPACE] dash   [LMB] shoot", True, (70, 60, 50))
     surf.blit(hint, (C.SCREEN_W - hint.get_width() - 10, hud_y + C.HUD_H - 20))
+
+    # ── Debug banner ─────────────────────────────────────────────────────────
+    if debug:
+        dbg = _font(14, bold=True).render("⚙ DEBUG  [K] kill all", True, (255, 80, 80))
+        surf.blit(dbg, (C.SCREEN_W // 2 - dbg.get_width() // 2, hud_y + C.HUD_H - 18))
 
 
 # ── Shared stat-block helper ──────────────────────────────────────────────────
@@ -612,23 +620,25 @@ def draw_menu(surf: pygame.Surface, highscore: dict) -> None:
 # ── Floor-clear overlay ───────────────────────────────────────────────────────
 
 def draw_floor_clear(surf: pygame.Surface, floor: int) -> None:
-    """Shown after the boss is defeated.  Press Space to descend."""
+    """Shown after the boss is defeated.  The staircase is visible behind."""
     overlay = pygame.Surface((C.SCREEN_W, C.SCREEN_H), pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 180))
+    overlay.fill((0, 0, 0, 155))   # slightly lighter so staircase glow shows through
     surf.blit(overlay, (0, 0))
 
     cx = C.SCREEN_W // 2
     cy = C.PLAYFIELD_H // 2
 
     title = _font(62, bold=True).render(f"Floor {floor} Cleared!", True, (220, 200, 80))
-    surf.blit(title, (cx - title.get_width() // 2, cy - 70))
+    surf.blit(title, (cx - title.get_width() // 2, cy - 90))
 
-    sub = _font(24).render(
-        f"Descending to floor {floor + 1}…", True, (170, 155, 90))
-    surf.blit(sub, (cx - sub.get_width() // 2, cy + 10))
+    sub = _font(24).render("The ancient staircase has opened…", True, (150, 200, 115))
+    surf.blit(sub, (cx - sub.get_width() // 2, cy - 20))
 
-    hint = _font(20).render("Press  SPACE  to continue", True, (120, 110, 75))
-    surf.blit(hint, (cx - hint.get_width() // 2, cy + 55))
+    sub2 = _font(20).render(f"Descending to floor {floor + 1}", True, (120, 160, 88))
+    surf.blit(sub2, (cx - sub2.get_width() // 2, cy + 16))
+
+    hint = _font(20).render("Press  SPACE  to descend", True, (115, 105, 72))
+    surf.blit(hint, (cx - hint.get_width() // 2, cy + 58))
 
 
 # ── Victory screen ────────────────────────────────────────────────────────────
@@ -664,3 +674,108 @@ def draw_victory(
 
     hint = _font(20).render("Press  R  to return to menu", True, (140, 130, 90))
     surf.blit(hint, (cx - hint.get_width() // 2, hs_y + 10))
+
+
+# ── Descent staircase (drawn in boss room after floor clear) ──────────────────
+
+def draw_staircase(
+    surf: pygame.Surface,
+    camera: Camera,
+    x: float,
+    y: float,
+    t: float,
+) -> None:
+    """Stone staircase descending into the earth — appears after the boss dies."""
+    sx, sy = camera.apply_pos(x, y)
+    sx, sy = round(sx), round(sy)
+
+    # Pulsing forest-green glow
+    pulse = (math.sin(t * 1.8) + 1.0) * 0.5
+    gr = 30 + round(pulse * 10)
+    glow = pygame.Surface((gr * 2, gr * 2), pygame.SRCALPHA)
+    pygame.draw.circle(glow, (55, 195, 85, int(38 + pulse * 38)), (gr, gr), gr)
+    surf.blit(glow, (sx - gr, sy - gr))
+
+    # Dark pit opening beneath the steps
+    pygame.draw.ellipse(surf, (5, 4, 2),  (sx - 22, sy - 5, 44, 22))
+    pygame.draw.ellipse(surf, (12, 10, 6), (sx - 16, sy - 3, 32, 14))
+
+    # Four stone steps narrowing with depth
+    steps = [
+        (44, 8,  0,  (86, 68, 48)),
+        (32, 7,  7,  (74, 58, 40)),
+        (22, 6, 13,  (62, 48, 32)),
+        (14, 5, 18,  (50, 40, 26)),
+    ]
+    base_y = sy - 20
+    for w, h, yoff, col in steps:
+        rx = sx - w // 2
+        ry = base_y + yoff
+        # shadow
+        pygame.draw.rect(surf, (col[0] // 3, col[1] // 3, col[2] // 3),
+                         (rx + 2, ry + 2, w, h))
+        # step face
+        pygame.draw.rect(surf, col, (rx, ry, w, h))
+        # top-edge highlight
+        hi = (min(255, col[0] + 26), min(255, col[1] + 20), min(255, col[2] + 14))
+        pygame.draw.line(surf, hi, (rx, ry), (rx + w - 1, ry), 1)
+        # moss streak
+        pygame.draw.line(surf, (38, 88, 28),
+                         (rx, ry + h - 2), (rx + w // 3, ry + h - 2), 1)
+
+    # Small label so the player knows what it is
+    lbl = _font(13).render("Descend", True, (105, 185, 90))
+    surf.blit(lbl, (sx - lbl.get_width() // 2, sy + 12))
+
+
+# ── Pause screen ──────────────────────────────────────────────────────────────
+
+_PAUSE_BTN_W = 260
+_PAUSE_BTN_H = 52
+_PAUSE_BTN_GAP = 18
+
+
+def pause_button_rects() -> tuple[pygame.Rect, pygame.Rect]:
+    """Return (resume_rect, menu_rect) for click detection."""
+    cx = C.SCREEN_W // 2
+    cy = C.SCREEN_H // 2
+    top = cy + 10
+    resume = pygame.Rect(cx - _PAUSE_BTN_W // 2, top, _PAUSE_BTN_W, _PAUSE_BTN_H)
+    menu   = pygame.Rect(cx - _PAUSE_BTN_W // 2,
+                         top + _PAUSE_BTN_H + _PAUSE_BTN_GAP,
+                         _PAUSE_BTN_W, _PAUSE_BTN_H)
+    return resume, menu
+
+
+def draw_pause_screen(surf: pygame.Surface) -> None:
+    """Semi-transparent pause overlay drawn on top of the frozen game view."""
+    overlay = pygame.Surface((C.SCREEN_W, C.SCREEN_H), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 165))
+    surf.blit(overlay, (0, 0))
+
+    cx = C.SCREEN_W // 2
+    cy = C.SCREEN_H // 2
+
+    # Title
+    title = _font(64, bold=True).render("PAUSED", True, (210, 195, 155))
+    surf.blit(title, (cx - title.get_width() // 2, cy - 115))
+
+    # Subtitle hint
+    sub = _font(16).render("Esc  to resume", True, (115, 104, 80))
+    surf.blit(sub, (cx - sub.get_width() // 2, cy - 22))
+
+    resume_rect, menu_rect = pause_button_rects()
+    mx, my = pygame.mouse.get_pos()
+
+    for rect, label, hov in [
+        (resume_rect, "Resume",    resume_rect.collidepoint(mx, my)),
+        (menu_rect,   "Main Menu", menu_rect.collidepoint(mx, my)),
+    ]:
+        bg  = (72, 58, 36) if hov else (42, 33, 20)
+        bd  = (200, 170, 72) if hov else (88, 70, 42)
+        lc  = (255, 232, 130) if hov else (208, 188, 136)
+        pygame.draw.rect(surf, bg, rect, border_radius=6)
+        pygame.draw.rect(surf, bd, rect, 2, border_radius=6)
+        lbl = _font(24, bold=True).render(label, True, lc)
+        surf.blit(lbl, (rect.centerx - lbl.get_width() // 2,
+                        rect.centery - lbl.get_height() // 2))

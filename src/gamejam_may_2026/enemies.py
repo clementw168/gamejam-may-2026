@@ -1,4 +1,5 @@
-"""Enemy classes — GoblinRunner, GoblinArcher, Wolf, SporePlant."""
+"""Enemy classes — GoblinRunner, GoblinArcher, Wolf, SporePlant,
+StoneCrawler, VenomfangBat, CrystalTurret."""
 
 from __future__ import annotations
 
@@ -48,10 +49,22 @@ class Enemy:
         self._flash = 0.0  # white-flash timer
 
     def _move(self, dx: float, dy: float, room: Room) -> None:
-        if room.is_circle_walkable(self.x + dx, self.y, self.radius):
-            self.x += dx
-        if room.is_circle_walkable(self.x, self.y + dy, self.radius):
-            self.y += dy
+        # Sub-step to avoid large-step wall gaps and diagonal tunnelling.
+        _SUBSTEP = 4.0
+        steps = max(1, math.ceil(abs(dx) / _SUBSTEP))
+        sdx = dx / steps
+        for _ in range(steps):
+            if room.is_circle_walkable(self.x + sdx, self.y, self.radius):
+                self.x += sdx
+            else:
+                break
+        steps = max(1, math.ceil(abs(dy) / _SUBSTEP))
+        sdy = dy / steps
+        for _ in range(steps):
+            if room.is_circle_walkable(self.x, self.y + sdy, self.radius):
+                self.y += sdy
+            else:
+                break
 
     def take_hit(self, damage: int, particles: ParticleSystem) -> None:
         if self._iframes > 0:
@@ -587,16 +600,6 @@ class GoblinShaman(Enemy):
                 pygame.draw.circle(surf, (255, 220, 50), (body_sx + ex_off, body_sy - 4), 3)
                 pygame.draw.circle(surf, (200, 80, 255), (body_sx + ex_off, body_sy - 4), 1)
 
-        # Large boss HP bar (above the default small one)
-        bw = self.radius * 3
-        bx = sx - bw // 2
-        by = sy - self.radius - 16
-        pygame.draw.rect(surf, (40, 0, 0), (bx, by, bw, 6))
-        fill = round(bw * max(0, self.hp) / self.max_hp)
-        col = (255, 120, 30) if self._phase2 else (210, 45, 45)
-        pygame.draw.rect(surf, col, (bx, by, fill, 6))
-        pygame.draw.rect(surf, (120, 60, 30), (bx, by, bw, 6), 1)
-
 
 # ── Ancient Tree (boss — floor 3) ─────────────────────────────────────────────
 
@@ -778,12 +781,302 @@ class AncientTree(Enemy):
             ring_r = r + 8 + round(pulse * 5)
             pygame.draw.circle(surf, (100, 200, 55), (sx, sy), ring_r, 2)
 
-        # Large boss HP bar
-        bw = r * 3
-        bx = sx - bw // 2
-        by = sy - r - 16
-        pygame.draw.rect(surf, (20, 40, 10), (bx, by, bw, 6))
-        fill = round(bw * max(0, self.hp) / self.max_hp)
-        col = (100, 210, 60) if not self._phase2 else (200, 240, 80)
-        pygame.draw.rect(surf, col, (bx, by, fill, 6))
-        pygame.draw.rect(surf, (60, 110, 30), (bx, by, bw, 6), 1)
+
+# ── Stone Crawler (floor 4+) ──────────────────────────────────────────────────
+
+
+class StoneCrawler(Enemy):
+    """Armoured melee chaser — first 3 arrow hits are deflected by its stone shell.
+    Shell breaks after 3 deflects; resets only on room re-entry (via game.py)."""
+
+    _DEATH_COLOR_A = C.C_CRAWLER
+    _DEATH_COLOR_B = (200, 180, 155)
+
+    def __init__(self, x: float, y: float, *, floor: int = 1) -> None:
+        hp    = C.CRAWLER_HP + max(0, floor - 4) * 2   # 8 / 10 / 12 …
+        speed = C.CRAWLER_SPEED + max(0, floor - 4) * 5.0
+        super().__init__(x, y, hp=hp, radius=C.CRAWLER_RADIUS,
+                         speed=speed, coin_drop=C.CRAWLER_COIN_DROP)
+        self._shell_hits   = C.CRAWLER_SHELL_HITS  # deflect charges remaining
+        self._contact_cd   = 0.0
+        self._deflect_flash = 0.0   # brief bright-grey flash on deflect
+
+    def take_hit(self, damage: int, particles: ParticleSystem) -> None:
+        if self._iframes > 0:
+            return
+        if self._shell_hits > 0:
+            # Shell deflects this hit — no HP lost
+            self._shell_hits -= 1
+            self._iframes     = 0.18
+            self._deflect_flash = 0.14
+            sounds.play("hit_wall")           # metallic clank
+            particles.emit_enemy_hit(self.x, self.y)
+            return
+        super().take_hit(damage, particles)
+
+    def update(
+        self,
+        dt: float,
+        player: Player,
+        room: Room,
+        particles: ParticleSystem,
+        _projs: list[EnemyProjectile],
+    ) -> None:
+        if not self.alive:
+            return
+        self._iframes       = max(0.0, self._iframes - dt)
+        self._flash         = max(0.0, self._flash - dt)
+        self._deflect_flash = max(0.0, self._deflect_flash - dt)
+        self._contact_cd    = max(0.0, self._contact_cd - dt)
+
+        dx = player.x - self.x
+        dy = player.y - self.y
+        dist = math.hypot(dx, dy)
+        if dist > 0:
+            self._move(dx / dist * self.speed * dt, dy / dist * self.speed * dt, room)
+
+        if self._contact_cd <= 0:
+            if math.hypot(player.x - self.x, player.y - self.y) < self.radius + player.radius:
+                if player.take_damage(C.CRAWLER_DAMAGE):
+                    particles.emit_player_hurt(player.x, player.y)
+                self._contact_cd = 0.55
+
+    def draw(self, surf: pygame.Surface, camera: Camera) -> None:
+        sx, sy = camera.apply_pos(self.x, self.y)
+        sx, sy = round(sx), round(sy)
+        r = self.radius
+
+        # Shell ring (visible while charges remain)
+        if self._shell_hits > 0:
+            shell_col = (220, 210, 195) if self._deflect_flash > 0 else (155, 142, 122)
+            pygame.draw.circle(surf, shell_col, (sx, sy), r + 4, 3)
+            # Small pips showing remaining charges
+            for i in range(self._shell_hits):
+                angle = math.radians(-90 + i * (360 / C.CRAWLER_SHELL_HITS))
+                px2 = sx + round(math.cos(angle) * (r + 9))
+                py2 = sy + round(math.sin(angle) * (r + 9))
+                pygame.draw.circle(surf, (215, 200, 180), (px2, py2), 3)
+
+        # Body
+        if self._deflect_flash > 0:
+            color = (235, 228, 215)
+        elif self._flash > 0:
+            color = (255, 255, 255)
+        else:
+            color = C.C_CRAWLER
+        pygame.draw.circle(surf, (8, 8, 8), (sx + 2, sy + 4), r - 2)   # shadow
+        pygame.draw.circle(surf, color, (sx, sy), r)
+        if self._deflect_flash <= 0 and self._flash <= 0:
+            pygame.draw.circle(surf, C.C_CRAWLER_DARK, (sx, sy + r // 3), r // 2)
+            # Stone crack lines
+            pygame.draw.line(surf, C.C_CRAWLER_DARK, (sx - 6, sy - 4), (sx + 2, sy + 5), 1)
+            pygame.draw.line(surf, C.C_CRAWLER_DARK, (sx + 4, sy - 6), (sx + 1, sy + 3), 1)
+
+        # HP bar
+        if self.hp < self.max_hp:
+            bw = r * 2
+            bx2, by2 = sx - r, sy - r - 8
+            pygame.draw.rect(surf, (40, 30, 15), (bx2, by2, bw, 4))
+            fill = round(bw * self.hp / self.max_hp)
+            pygame.draw.rect(surf, (185, 162, 128), (bx2, by2, fill, 4))
+
+
+# ── VenomfangBat (floor 4+) ───────────────────────────────────────────────────
+
+
+class VenomfangBat(Enemy):
+    """Fast arc-mover — poisons the player on contact."""
+
+    _DEATH_COLOR_A = C.C_BAT
+    _DEATH_COLOR_B = (155, 100, 210)
+
+    def __init__(self, x: float, y: float, *, floor: int = 1) -> None:
+        speed = C.BAT_SPEED + max(0, floor - 4) * 8.0
+        super().__init__(x, y, hp=C.BAT_HP, radius=C.BAT_RADIUS,
+                         speed=speed, coin_drop=C.BAT_COIN_DROP)
+        self._t          = random.uniform(0.0, 6.28)   # wobble phase
+        self._contact_cd = 0.0
+
+    def update(
+        self,
+        dt: float,
+        player: Player,
+        room: Room,
+        particles: ParticleSystem,
+        _projs: list[EnemyProjectile],
+    ) -> None:
+        if not self.alive:
+            return
+        self._iframes    = max(0.0, self._iframes - dt)
+        self._flash      = max(0.0, self._flash - dt)
+        self._contact_cd = max(0.0, self._contact_cd - dt)
+        self._t         += dt
+
+        dx = player.x - self.x
+        dy = player.y - self.y
+        dist = math.hypot(dx, dy)
+        if dist > 0:
+            nx, ny = dx / dist, dy / dist
+            # Arc wobble — perpendicular amplitude ~120 px/s
+            wobble_amp = 120.0 / (self.speed or 1.0)
+            wobble     = math.sin(self._t * 4.0) * wobble_amp
+            mx = nx + (-ny * wobble)
+            my = ny + (nx * wobble)
+            mag = math.hypot(mx, my) or 1.0
+            self._move(mx / mag * self.speed * dt, my / mag * self.speed * dt, room)
+
+        if self._contact_cd <= 0:
+            if math.hypot(player.x - self.x, player.y - self.y) < self.radius + player.radius:
+                if player.take_damage(1):
+                    player._poison_t = C.BAT_POISON_DUR
+                    particles.emit_player_hurt(player.x, player.y)
+                self._contact_cd = 0.5
+
+    def draw(self, surf: pygame.Surface, camera: Camera) -> None:
+        sx, sy = camera.apply_pos(self.x, self.y)
+        sx, sy = round(sx), round(sy)
+        r = self.radius
+
+        # Flapping wings
+        if self._flash <= 0:
+            wing_flap = math.sin(self._t * 9.0)
+            for sign in (-1, 1):
+                tip_x = sx + sign * round(r + 9 + wing_flap * 4)
+                tip_y = sy - 5
+                wing_pts = [(sx, sy), (tip_x, tip_y), (sx + sign * (r + 4), sy + 4)]
+                pygame.draw.polygon(surf, C.C_BAT_DARK, wing_pts)
+
+        # Shadow + body
+        pygame.draw.circle(surf, (8, 8, 8), (sx + 1, sy + 3), r - 1)
+        color = (255, 255, 255) if self._flash > 0 else C.C_BAT
+        pygame.draw.circle(surf, color, (sx, sy), r)
+        if self._flash <= 0:
+            pygame.draw.circle(surf, C.C_BAT_DARK, (sx, sy + r // 3), r // 2)
+            # Red eyes
+            for ex in (-3, 3):
+                pygame.draw.circle(surf, (220, 40, 40), (sx + ex, sy - 2), 2)
+
+        # HP bar
+        if self.hp < self.max_hp:
+            bw = r * 2
+            bx2, by2 = sx - r, sy - r - 7
+            pygame.draw.rect(surf, (40, 0, 40), (bx2, by2, bw, 4))
+            fill = round(bw * self.hp / self.max_hp)
+            pygame.draw.rect(surf, C.C_BAT, (bx2, by2, fill, 4))
+
+
+# ── Crystal Turret (floor 5+) ─────────────────────────────────────────────────
+
+
+class CrystalTurret(Enemy):
+    """Stationary turret — fires rotating 3-way crystal volleys.
+    Immune to arrows from the front face (±60°); takes double damage from behind.
+    The red dot on the body marks the vulnerable back face."""
+
+    _DEATH_COLOR_A = C.C_TURRET
+    _DEATH_COLOR_B = (200, 240, 255)
+
+    _WIND_DUR = 0.5
+
+    def __init__(self, x: float, y: float, *, floor: int = 1) -> None:
+        hp = C.TURRET_HP + max(0, floor - 5) * 3   # 10 / 13 / 16 …
+        super().__init__(x, y, hp=hp, radius=C.TURRET_RADIUS,
+                         speed=0.0, coin_drop=C.TURRET_COIN_DROP)
+        self._face_angle = random.uniform(0, math.pi * 2)
+        self._shoot_cd   = random.uniform(0.5, C.TURRET_SHOOT_CD)
+        self._winding    = False
+        self._wind_up    = 0.0
+        self._pulse_t    = random.uniform(0.0, 6.28)
+
+    def update(
+        self,
+        dt: float,
+        player: Player,
+        room: Room,
+        particles: ParticleSystem,
+        projs: list[EnemyProjectile],
+    ) -> None:
+        if not self.alive:
+            return
+        self._iframes  = max(0.0, self._iframes - dt)
+        self._flash    = max(0.0, self._flash - dt)
+        self._pulse_t += dt * 1.8
+        self._shoot_cd -= dt
+
+        if self._shoot_cd <= self._WIND_DUR and not self._winding:
+            self._winding  = True
+            self._wind_up  = 0.0
+
+        if self._winding:
+            self._wind_up += dt
+            if self._wind_up >= self._WIND_DUR:
+                spread = math.radians(28)
+                for off in (-spread, 0.0, spread):
+                    projs.append(EnemyProjectile(
+                        self.x, self.y,
+                        self._face_angle + off,
+                        speed=C.TURRET_PROJ_SPEED,
+                        color=C.C_TURRET_BEAM,
+                        damage=1,
+                        lifetime=2.5,
+                    ))
+                sounds.play("spore_shoot")
+                self._face_angle += math.radians(15)   # rotate for next volley
+                self._shoot_cd    = C.TURRET_SHOOT_CD
+                self._winding     = False
+                self._wind_up     = 0.0
+
+    def draw(self, surf: pygame.Surface, camera: Camera) -> None:
+        sx, sy = camera.apply_pos(self.x, self.y)
+        sx, sy = round(sx), round(sy)
+        r = self.radius
+        pulse = (math.sin(self._pulse_t) + 1.0) * 0.5
+
+        # Pulsing outer glow ring
+        ring_r = r + 3 + round(pulse * 3)
+        pygame.draw.circle(surf, C.C_TURRET_DARK, (sx, sy), ring_r, 2)
+
+        # Wind-up charge glow
+        if self._winding:
+            frac    = self._wind_up / self._WIND_DUR
+            glow_r  = r + round(frac * 18)
+            pygame.draw.circle(surf, C.C_TURRET_BEAM, (sx, sy), glow_r, 2)
+
+        # Crystal octagon body
+        _FACETS = 8
+        pts = []
+        for i in range(_FACETS):
+            a = math.radians(i * 360 / _FACETS + 22.5)
+            pts.append((sx + round(math.cos(a) * r), sy + round(math.sin(a) * r)))
+        shadow_pts = [(x + 2, y + 3) for x, y in pts]
+        pygame.draw.polygon(surf, (8, 8, 8), shadow_pts)
+        body_col = (255, 255, 255) if self._flash > 0 else C.C_TURRET
+        pygame.draw.polygon(surf, body_col, pts)
+        if self._flash <= 0:
+            inner = []
+            for i in range(_FACETS):
+                a = math.radians(i * 360 / _FACETS + 22.5)
+                inner.append((sx + round(math.cos(a) * (r - 5)),
+                               sy + round(math.sin(a) * (r - 5))))
+            pygame.draw.polygon(surf, C.C_TURRET_DARK, inner)
+
+        # Front-face indicator (bright spike in fire direction)
+        fa    = self._face_angle
+        tip_x = sx + round(math.cos(fa) * (r + 7))
+        tip_y = sy + round(math.sin(fa) * (r + 7))
+        pygame.draw.line(surf, C.C_TURRET_BEAM, (sx, sy), (tip_x, tip_y), 3)
+        pygame.draw.circle(surf, (255, 255, 255), (tip_x, tip_y), 3)
+
+        # Back-face vulnerability marker (red dot on opposite side)
+        ba    = fa + math.pi
+        bx_t  = sx + round(math.cos(ba) * (r + 5))
+        by_t  = sy + round(math.sin(ba) * (r + 5))
+        pygame.draw.circle(surf, (210, 55, 55), (bx_t, by_t), 4)
+
+        # HP bar
+        if self.hp < self.max_hp:
+            bw = r * 2
+            bx2, by2 = sx - r, sy - r - 9
+            pygame.draw.rect(surf, (20, 30, 40), (bx2, by2, bw, 4))
+            fill = round(bw * self.hp / self.max_hp)
+            pygame.draw.rect(surf, C.C_TURRET, (bx2, by2, fill, 4))
