@@ -33,6 +33,7 @@ from gamejam_may_2026.enemies import (
 )
 from gamejam_may_2026.particles import ParticleSystem
 from gamejam_may_2026.perks import Perk, PERK_POOL
+from gamejam_may_2026.relics import Relic, RELIC_POOL
 from gamejam_may_2026.player import Player
 from gamejam_may_2026.projectiles import EnemyProjectile
 from gamejam_may_2026.rooms import Room
@@ -375,9 +376,16 @@ class Game:
         self._trans_old_room: Room        | None       = None
 
         # Upgrade state
-        self._upgrade_perks:   list[Perk] = []
-        self._upgrade_hovered: int        = -1
-        self._upgrade_open_ms: int        = 0   # ticks when upgrade screen opened
+        self._upgrade_perks:   list[Perk]  = []
+        self._upgrade_hovered: int         = -1
+        self._upgrade_open_ms: int         = 0   # ticks when upgrade screen opened
+
+        # Relic state (shown between FLOOR_CLEAR and floor advance)
+        self._relic_choices:  list[Relic] = []
+        self._relic_hovered:  int         = -1
+
+        # Temporal Blur clones (spawned when player dashes with that relic)
+        self._blur_clones: list[dict] = []   # each: {x, y, charges}
 
         # Shop state
         self._shop_hovered: int = -1
@@ -416,7 +424,7 @@ class Game:
     def handle_event(self, event: pygame.event.Event) -> None:
         # Escape toggles pause from any live gameplay state
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            if self.state in ("PLAYING", "UPGRADE", "SHOP", "FLOOR_CLEAR"):
+            if self.state in ("PLAYING", "UPGRADE", "SHOP", "FLOOR_CLEAR", "RELIC"):
                 self._pre_pause_state = self.state
                 self.state = "PAUSED"
                 return
@@ -436,13 +444,15 @@ class Game:
             self.player.handle_event(event, self.particles)
         elif self.state == "UPGRADE":
             self._handle_upgrade_event(event)
+        elif self.state == "RELIC":
+            self._handle_relic_event(event)
         elif self.state == "SHOP":
             self._handle_shop_event(event)
         elif self.state == "FLOOR_CLEAR":
             if event.type == pygame.KEYDOWN and event.key in (
                 pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER
             ):
-                self._next_floor()
+                self._start_relic_selection()
         elif self.state in ("DEAD", "VICTORY"):
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
                 self.state = "MENU"
@@ -483,6 +493,49 @@ class Game:
                 self.state = self._pre_pause_state
             elif menu_rect.collidepoint(event.pos):
                 self.state = "MENU"
+
+    # ── Relic selection ───────────────────────────────────────────────────────
+    def _start_relic_selection(self) -> None:
+        """Randomly pick 2 relics from the pool (excluding already-held ones) and
+        enter the RELIC state.  If the pool is exhausted, advance directly."""
+        held_ids = {r.id for r in self.player.relics}
+        available = [r for r in RELIC_POOL if r.id not in held_ids]
+        if not available:
+            self._next_floor()
+            return
+        self._relic_choices = random.sample(available, min(2, len(available)))
+        self._relic_hovered = -1
+        self.state = "RELIC"
+
+    def _handle_relic_event(self, event: pygame.event.Event) -> None:
+        if event.type == pygame.MOUSEMOTION:
+            self._relic_hovered = self._relic_card_at(*event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            idx = self._relic_card_at(*event.pos)
+            if idx >= 0:
+                self._pick_relic(idx)
+        elif event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_1, pygame.K_KP1):
+                self._pick_relic(0)
+            elif event.key in (pygame.K_2, pygame.K_KP2):
+                self._pick_relic(1)
+
+    def _relic_card_at(self, mx: int, my: int) -> int:
+        """Return 0 or 1 if (mx, my) hits that relic card, else -1."""
+        from gamejam_may_2026.ui import _relic_card_rect
+        for i in range(len(self._relic_choices)):
+            if _relic_card_rect(i).collidepoint(mx, my):
+                return i
+        return -1
+
+    def _pick_relic(self, idx: int) -> None:
+        if 0 <= idx < len(self._relic_choices):
+            relic = self._relic_choices[idx]
+            relic.apply(self.player)
+            self.player.relics.append(relic)
+        self._relic_choices = []
+        self._relic_hovered = -1
+        self._next_floor()
 
     def _upgrade_card_at(self, mx: int, my: int) -> int:
         """Return 0/1/2 if (mx, my) is inside that card, else -1."""
@@ -573,13 +626,21 @@ class Game:
         self.coins             = []
         self.chests            = []
         self.burn_patches      = []
+        self._blur_clones      = []
         self.camera            = Camera()
         self._boss_hint_t      = 0.0
         self._show_staircase   = False
         self._staircase_t      = 0.0
         self._void_flash_t     = 0.0
         self._burn_dot_acc     = 0.0
-        self.state             = "PLAYING"
+
+        # Relic per-floor effects
+        if self.player.wardens_mark:
+            self.player.hp = max(1, self.player.hp // 2)
+        if self.player.curse_of_greed:
+            self.player.coins = 0
+
+        self.state = "PLAYING"
 
     # ── Boss-gate helpers ─────────────────────────────────────────────────────
     def _all_non_boss_cleared(self) -> bool:
@@ -632,11 +693,41 @@ class Game:
         dr   = self._dr
         room = self._room
 
+        # Track dash state BEFORE player.update so we can detect the start of a dash
+        prev_px    = self.player.x
+        prev_py    = self.player.y
+        was_dashing = self.player._dashing
+
         self.player.update(dt, room, self.particles)
         if self.player.dead:
             self._finish_run()
             self.state = "DEAD"
             return
+
+        # Temporal Blur — spawn 2 clones at dash-start position
+        if self.player.temporal_blur and not was_dashing and self.player._dashing:
+            for _ in range(2):
+                self._blur_clones.append({'x': prev_px, 'y': prev_py, 'charges': 1})
+
+        # Shrapnel Tips — spawn 3 mini-shrapnel per wall-hit arrow
+        if self.player.shrapnel_tips:
+            for wx, wy, wang in self.player._wall_hit_arrows:
+                refl_base = math.atan2(-math.sin(wang), -math.cos(wang))
+                for dang in (-0.52, 0.0, 0.52):   # ≈ ±30°
+                    shr = Arrow(wx, wy, refl_base + dang, speed=450, damage=1, lifetime=0.30)
+                    self.player.arrows.append(shr)
+
+        # Phase Cloak / Iron Lungs — dash-through effects
+        if self.player._dashing:
+            for e in self.enemies:
+                if e.alive and ((e.x - self.player.x) ** 2 + (e.y - self.player.y) ** 2
+                                < (e.radius + self.player.radius) ** 2):
+                    if self.player.phase_cloak:
+                        e._stun_t = max(getattr(e, '_stun_t', 0.0), 0.8)
+                    if self.player.iron_lungs:
+                        e.take_hit(1, self.particles)
+                        if not e.alive:
+                            self._drop_coins(e)
 
         # ── Block locked doors ────────────────────────────────────────────────
         # Locked = room not cleared (all doors) OR leading to boss-room while
@@ -684,6 +775,14 @@ class Game:
                 new_summons.extend(q)
                 q.clear()
         self.enemies.extend(new_summons)
+
+        # Drain Void Core pulse queue from player → piercing arrows
+        for vx2, vy2, vangle in self.player._void_queue:
+            vcore_arrow = Arrow(vx2, vy2, vangle,
+                                speed=280, damage=self.player.arrow_damage, lifetime=0.6)
+            vcore_arrow.piercing = True
+            self.player.arrows.append(vcore_arrow)
+        self.player._void_queue.clear()
 
         # Drain MagmaSlug burn-patch queues → BurnPatch objects
         for e in self.enemies:
@@ -743,6 +842,9 @@ class Game:
                         arrow.alive = False
                     # CrystalTurret directional vulnerability
                     actual_dmg = arrow.damage
+                    # Overcharged Quiver: every 4th arrow deals ×3
+                    if getattr(arrow, '_overcharged', False):
+                        actual_dmg = arrow.damage * 3
                     if isinstance(enemy, CrystalTurret):
                         impact = math.atan2(arrow.y - enemy.y, arrow.x - enemy.x)
                         diff   = math.atan2(
@@ -752,24 +854,79 @@ class Game:
                         if abs(diff) < math.pi / 3:        # front ±60° — immune
                             actual_dmg = 0
                         elif abs(diff) > math.pi * 2 / 3:  # back 120° — double
-                            actual_dmg = arrow.damage * 2
+                            actual_dmg = max(actual_dmg, arrow.damage * 2)
                     if actual_dmg > 0:
+                        # Hunter's Mark: first enemy hit per room takes ×3
+                        if self.player.hunter_mark and not self.player._hunter_mark_used:
+                            actual_dmg *= 3
+                            self.player._hunter_mark_used = True
                         enemy.take_hit(actual_dmg, self.particles)
+                        # Venom Gland: tag enemy with poison (Day 12 ticks it)
+                        if self.player.arrow_poison:
+                            enemy._poison_t = max(getattr(enemy, '_poison_t', 0.0), 4.0)
                     self.camera.add_shake(3)
                     if getattr(enemy, 'phase2_just_triggered', False):
                         enemy.phase2_just_triggered = False
                         self.camera.add_shake(14)
                     if not enemy.alive:
                         self._drop_coins(enemy)
+                        # Echoing Shot: spawn reflected arrow aimed at nearest survivor
+                        if self.player.echoing_shot:
+                            living = [e for e in self.enemies
+                                      if e.alive and e is not enemy]
+                            if living:
+                                near = min(living, key=lambda e: (e.x - enemy.x) ** 2
+                                                                  + (e.y - enemy.y) ** 2)
+                                if (near.x - enemy.x) ** 2 + (near.y - enemy.y) ** 2 < 300 ** 2:
+                                    ea = math.atan2(near.y - enemy.y, near.x - enemy.x)
+                                    self.player.arrows.append(Arrow(
+                                        enemy.x, enemy.y, ea,
+                                        speed=self.player.arrow_speed,
+                                        damage=self.player.arrow_damage,
+                                        piercing=self.player.piercing,
+                                    ))
+                        # Leech Stone: +1 HP every 5 kills
+                        if self.player.leech_stone:
+                            self.player._leech_kills += 1
+                            if self.player._leech_kills >= 5:
+                                self.player._leech_kills = 0
+                                if self.player.hp < self.player.max_hp:
+                                    self.player.hp += 1
+                        # Bloodlust: +10 % speed per kill, stacks ×3, 3 s timer
+                        if self.player.bloodlust:
+                            self.player._bloodlust_stacks = min(3, self.player._bloodlust_stacks + 1)
+                            self.player._bloodlust_t = 3.0
 
         for ep in self.enemy_projectiles:
             if not ep.alive:
+                continue
+            # Temporal Blur clones intercept projectiles
+            absorbed = False
+            for clone in self._blur_clones:
+                if (ep.x - clone['x']) ** 2 + (ep.y - clone['y']) ** 2 < 14 ** 2:
+                    ep.alive = False
+                    clone['charges'] -= 1
+                    self.particles.emit_hit(ep.x, ep.y, 0)
+                    absorbed = True
+                    break
+            if absorbed:
                 continue
             if (ep.x - self.player.x) ** 2 + (ep.y - self.player.y) ** 2 < (C.PLAYER_RADIUS + 6) ** 2:
                 ep.alive = False
                 if self.player.take_damage(ep.damage):
                     self.particles.emit_player_hurt(self.player.x, self.player.y)
                     self.camera.add_shake(6)
+                    # Spiked Shell: deal 2 dmg to all enemies within 80 px
+                    if self.player.spiked_shell:
+                        for e in self.enemies:
+                            if e.alive and ((e.x - self.player.x) ** 2
+                                            + (e.y - self.player.y) ** 2 < 80 ** 2):
+                                e.take_hit(2, self.particles)
+                                if not e.alive:
+                                    self._drop_coins(e)
+
+        # Prune expired blur clones
+        self._blur_clones = [c for c in self._blur_clones if c['charges'] > 0]
 
         # Drain any VoidShrieker death-burst projectiles triggered by arrow kills
         for e in self.enemies:
@@ -786,6 +943,13 @@ class Game:
             if coin.update(dt, self.player, self.particles):
                 sounds.play("coin")
                 self._coins_collected_total += 1
+                # Coin-Fed Heart: +1 HP every 10 coins (can't over-heal if Petrified Heart)
+                if self.player.coin_fed_heart:
+                    self.player._coin_fed_acc += 1
+                    if self.player._coin_fed_acc >= 10:
+                        self.player._coin_fed_acc = 0
+                        if self.player.hp < self.player.max_hp and not self.player.petrified_heart:
+                            self.player.hp += 1
         self.coins = [c for c in self.coins if not c.collected]
 
         # ── Burn patches (MagmaSlug DoT floor hazard) ─────────────────────────
@@ -850,13 +1014,13 @@ class Game:
 
     def _update_floor_clear(self, dt: float) -> None:
         """Player can move freely during the floor-clear overlay; walking into
-        the staircase descends to the next floor (Space is the fallback)."""
+        the staircase (or pressing Space) opens the relic-selection screen."""
         self.player.update(dt, self._room, self.particles)
         if self._show_staircase:
             dx = self.player.x - self._staircase_x
             dy = self.player.y - self._staircase_y
             if dx * dx + dy * dy < 40.0 ** 2:
-                self._next_floor()
+                self._start_relic_selection()
 
     def _check_door_exit(self) -> None:
         p      = self.player
@@ -923,10 +1087,18 @@ class Game:
         self.dungeon.current = next_dr
         self.chests.clear()           # chests belong to the room we just left
         self.burn_patches.clear()     # burn patches belong to the room we just left
+        self._blur_clones.clear()     # clones don't carry across rooms
 
         # Convert player from world-space back to local room coords
         self.player.x -= self._trans_wdx
         self.player.y -= self._trans_wdy
+
+        # Relic per-room resets
+        if self.player.ancient_sigil:
+            self.player._iframes = max(self.player._iframes, 1.0)
+        if self.player.bone_buckler:
+            self.player.block_charge = 1
+        self.player._hunter_mark_used = False
 
         # Reset camera to room-local origin
         self.camera.offset.x = 0.0
@@ -964,7 +1136,8 @@ class Game:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
     def _drop_coins(self, enemy: Enemy) -> None:
-        for _ in range(enemy.coin_drop):
+        n = enemy.coin_drop * (2 if self.player.curse_of_greed else 1)
+        for _ in range(n):
             ox = random.uniform(-24, 24)
             oy = random.uniform(-24, 24)
             self.coins.append(Coin(enemy.x + ox, enemy.y + oy))
@@ -1022,12 +1195,16 @@ class Game:
             ui.draw_floor_clear(self.screen, self.dungeon.floor)
         elif self.state == "UPGRADE":
             ui.draw_upgrade_screen(self.screen, self._upgrade_perks, self._upgrade_hovered)
+        elif self.state == "RELIC":
+            ui.draw_relic_screen(self.screen, self._relic_choices, self._relic_hovered)
         elif self.state == "SHOP":
             ui.draw_shop_screen(self.screen, self._dr.shop_items, self.player, self._shop_hovered)
         elif self.state == "PAUSED":
             # Re-draw whichever overlay was active before pausing, then the pause screen on top
             if self._pre_pause_state == "UPGRADE":
                 ui.draw_upgrade_screen(self.screen, self._upgrade_perks, self._upgrade_hovered)
+            elif self._pre_pause_state == "RELIC":
+                ui.draw_relic_screen(self.screen, self._relic_choices, self._relic_hovered)
             elif self._pre_pause_state == "SHOP":
                 ui.draw_shop_screen(self.screen, self._dr.shop_items, self.player, self._shop_hovered)
             elif self._pre_pause_state == "FLOOR_CLEAR":
@@ -1058,6 +1235,14 @@ class Game:
 
         for patch in self.burn_patches:
             patch.draw(self.screen, cam)
+        # Temporal Blur afterimage clones
+        for clone in self._blur_clones:
+            cx2, cy2 = cam.apply_pos(clone['x'], clone['y'])
+            r = C.PLAYER_RADIUS + 2
+            ghost = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(ghost, (140, 190, 255, 80), (r, r), r)
+            pygame.draw.circle(ghost, (200, 230, 255, 120), (r, r), r, 2)
+            self.screen.blit(ghost, (round(cx2) - r, round(cy2) - r))
         for coin in self.coins:
             coin.draw(self.screen, cam)
         for chest in self.chests:

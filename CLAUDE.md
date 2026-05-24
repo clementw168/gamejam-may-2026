@@ -22,7 +22,8 @@ uv run verdant-depths [--keys arrows|wasd|zqsd]
 | `dungeon.py` | DFS room graph (5–7 rooms), BFS boss detection (connection-graph BFS), `DungeonRoom` nodes |
 | `player.py` | Movement, dash (SPACE, i-frames), shoot (LMB), per-run stats (speed/damage/…), sounds |
 | `perks.py` | 12 `Perk` dataclasses; each has `apply(player)` callback |
-| `enemies.py` | GoblinRunner, GoblinArcher, Wolf, SporePlant, **GoblinShaman**, **AncientTree** + Enemy base |
+| `enemies.py` | GoblinRunner, GoblinArcher, Wolf, SporePlant, **GoblinShaman**, **AncientTree** + Enemy base; StoneCrawler, VenomfangBat, CrystalTurret, ShadowWraith, BoneArcher, MagmaSlug, VoidShrieker |
+| `relics.py` | 20 `Relic` dataclasses; each has `apply(player)` callback; `RELIC_POOL` list |
 | `projectiles.py` | Arrow (speed/damage/piercing kwargs, hit_enemies set), EnemyProjectile |
 | `particles.py` | Lightweight particle pool, named presets (inc. boss death/phase-2 bursts) |
 | `ui.py` | HUD, minimap, **main menu**, death/victory/floor-clear screens (with run stats + high score), upgrade chooser, shop screen, **boss HP bar**, **boss-gate hint** |
@@ -133,8 +134,8 @@ Override any track: drop `<name>.ogg` (or `.wav`) in `src/gamejam_may_2026/asset
 | 8 | ✅ done | **Floor expansion** — 7 floors total; per-floor room count `max(5,floor+4)–min(14,floor+6)`; `_spawn_wave` table extended to floors 4–7; `GoblinArcher` floor-scaled; victory/UI strings updated to `/7` |
 | 9 | ✅ done | **New enemies A** — StoneCrawler (armoured melee, deflect shell), VenomfangBat (fast arc mover, applies Poison on contact), CrystalTurret (rotating 3-laser volley, vulnerable from behind); added to `_spawn_wave` floors 4–5; fixed GoblinShaman/AncientTree double HP bar |
 | 10 | ✅ done | **New enemies B** — ShadowWraith (teleporting homing-shot caster), BoneArcher (3-way spread + bone spike every 4th shot), MagmaSlug (slow melee + burn-patch DoT floor hazard), VoidShrieker (death burst + void-flash vignette on attack); added floors 5–7; `BurnPatch` class in `game.py`; homing projectile steering in `_update_playing` |
-| 11 | 🔜 next | **Relic system** — `relics.py` (20 relics, `Relic` dataclass with `apply(player)`); `RELIC` state between `FLOOR_CLEAR` and floor advance (pick 1 of 2 cards); `player.relics` list; relic icon strip in HUD |
-| 12 | 🔜 | **Status effects** — Poison, Slow, Burn, Stun, Bleed on `Enemy` base class (`tick_status(dt, particles)`) and Burn/Poison on `Player`; coloured status rings in draw; `arrow_poison`, `dash_stun`, `thorns` player flags |
+| 11 | ✅ done | **Relic system** — `relics.py` (20 relics); `RELIC` state between `FLOOR_CLEAR` and floor advance (pick 1 of 2 cards); `player.relics` list + icon strip in HUD; all 20 relic effects wired (bone_buckler, temporal_blur clones, runic arrows bounce, void core pulse, overcharged quiver, bloodlust speed, curse of greed, echoing shot, leech stone, spiked shell, hunter's mark, shrapnel tips, phase cloak, coin-fed heart, ancient sigil, petrified heart, wardens mark, iron lungs, venom gland, echo chamber) |
+| 12 | 🔜 next | **Status effects** — Poison, Slow, Burn, Stun, Bleed on `Enemy` base class (`tick_status(dt, particles)`) and Burn/Poison on `Player`; coloured status rings in draw; `arrow_poison`, `dash_stun`, `thorns` player flags |
 | 13 | 🔜 | **New bosses** — IronWarden (F4, stomp + shrapnel + charge), AbyssalLeech (F5, HP-stealing tendrils), FungalMatriarch (F6, summon Spore Elders + Bats), VoidSovereign (F7, shrinking void field + 8-way bursts) |
 | 14 | 🔜 | **Room templates + polish** — 3–4 new underground templates (tight corridor, circular pit, asymmetric rubble, flooded chamber); balance pass floors 4–7; menu tagline updated; final high-score `/7` display |
 

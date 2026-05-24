@@ -63,6 +63,47 @@ class Player:
         # Dead flag
         self.dead = False
 
+        # ── Relic inventory ───────────────────────────────────────────────────
+        self.relics:             list  = []    # for HUD icon strip
+
+        # Relic effect flags / counters (set by Relic.apply)
+        self.wardens_mark:       bool  = False  # half HP per floor start
+        self.echoing_shot:       bool  = False  # echo arrow on kill
+        self.arrow_poison:       bool  = False  # Venom Gland — tags enemies (Day 12 ticks)
+        self.iron_lungs:         bool  = False  # dash-through contact damage
+        self.bone_buckler:       bool  = False  # Bone Buckler relic (reset charge per room)
+        self.block_charge:       int   = 0      # Bone Buckler — absorb next hit
+        self.coin_fed_heart:     bool  = False  # +1 HP per 10 coins
+        self._coin_fed_acc:      int   = 0      # coin accumulator for Coin-Fed Heart
+        self.shrapnel_tips:      bool  = False  # wall-impact shrapnel fan
+        self.phase_cloak:        bool  = False  # dash stuns enemies
+        self.leech_stone:        bool  = False  # +HP on 5 kills
+        self._leech_kills:       int   = 0      # kill counter
+        self.overcharged_quiver: bool  = False  # every 4th arrow ×3 dmg
+        self._overcharged_count: int   = 0      # arrow counter
+        self.ancient_sigil:      bool  = False  # 1 s iframes on room entry
+        self.spiked_shell:       bool  = False  # AoE on hurt
+        self.temporal_blur:      bool  = False  # blur clones on dash
+        self.runic_arrows:       bool  = False  # arrows bounce off walls
+        self.bloodlust:          bool  = False  # speed on kill
+        self._bloodlust_stacks:  int   = 0      # 0–3
+        self._bloodlust_t:       float = 0.0    # seconds remaining
+        self.curse_of_greed:     bool  = False  # 2× coins, zero per floor
+        self.petrified_heart:    bool  = False  # 50% dmg reduction, no overheal
+        self.hunter_mark:        bool  = False  # first hit per room ×3
+        self._hunter_mark_used:  bool  = False  # cleared per room
+        self.void_core:          bool  = False  # 8-way pulse every 10 s
+        self._void_t:            float = 10.0   # countdown to next pulse
+        self._void_queue:        list  = []     # (x, y, angle) tuples for game.py
+
+        # Shrapnel tips — dead wall-hit arrow positions for game.py
+        self._wall_hit_arrows:   list  = []     # (x, y, angle)
+
+    # ── Effective speed (bloodlust bonus stacked on top of base speed) ────────
+    @property
+    def _effective_speed(self) -> float:
+        return self.speed * (1.0 + 0.10 * self._bloodlust_stacks)
+
     # ── Input handling ─────────────────────────────────────────────────────────
     def handle_event(self, event: pygame.event.Event, particles: ParticleSystem) -> None:
         if event.type == pygame.KEYDOWN and event.key == config.get_keys()["dash"]:
@@ -93,16 +134,20 @@ class Player:
     def _try_shoot(self) -> None:
         if self._shoot_cd > 0:
             return
-        self.arrows.append(Arrow(
-            self.x, self.y, self.aim_angle,
-            speed=self.arrow_speed, damage=self.arrow_damage, piercing=self.piercing,
-        ))
+        angles = [self.aim_angle]
         if self.double_shot:
-            spread = 0.15  # radians between the two arrows
-            self.arrows.append(Arrow(
-                self.x, self.y, self.aim_angle + spread,
-                speed=self.arrow_speed, damage=self.arrow_damage, piercing=self.piercing,
-            ))
+            angles.append(self.aim_angle + 0.15)
+        for ang in angles:
+            if self.overcharged_quiver:
+                self._overcharged_count += 1
+            overcharged = self.overcharged_quiver and (self._overcharged_count % 4 == 0)
+            a = Arrow(
+                self.x, self.y, ang,
+                speed=self.arrow_speed, damage=self.arrow_damage,
+                piercing=self.piercing, bouncing=self.runic_arrows,
+                overcharged=overcharged,
+            )
+            self.arrows.append(a)
         self._shoot_cd = self.shoot_cooldown
         sounds.play("shoot")
 
@@ -119,6 +164,21 @@ class Player:
         self._dash_cd  = max(0.0, self._dash_cd  - dt)
         if config.DEBUG:
             self._dash_cd = 0.0   # infinite dash in debug mode
+
+        # Bloodlust speed-buff timer
+        if self._bloodlust_t > 0:
+            self._bloodlust_t -= dt
+            if self._bloodlust_t <= 0:
+                self._bloodlust_t = 0.0
+                self._bloodlust_stacks = 0
+
+        # Void Core — 8-way pulse every 10 s (queued for game.py to spawn)
+        if self.void_core:
+            self._void_t -= dt
+            if self._void_t <= 0:
+                self._void_t = 10.0
+                for i in range(8):
+                    self._void_queue.append((self.x, self.y, i * math.pi / 4))
 
         # Poison DoT — 1 HP/s, bypasses iframes
         if self._poison_t > 0:
@@ -151,14 +211,17 @@ class Player:
             if keys[km["left"]]:  mv.x -= 1
             if keys[km["right"]]: mv.x += 1
             if mv.length_squared() > 0:
-                mv = mv.normalize() * (self.speed * dt)
+                mv = mv.normalize() * (self._effective_speed * dt)
             self._move(mv.x, mv.y, room)
 
         # Update arrows
+        self._wall_hit_arrows.clear()
         for a in self.arrows:
             a.update(dt, room)
             if not a.alive:
                 particles.emit_hit(a.x, a.y, math.degrees(a.angle))
+                if getattr(a, '_wall_hit', False):
+                    self._wall_hit_arrows.append((a.x, a.y, a.angle))
         self.arrows = [a for a in self.arrows if a.alive]
 
     def _move(self, dx: float, dy: float, room: Room) -> None:
@@ -185,6 +248,15 @@ class Player:
         """Return True if damage was actually applied (not during iframes)."""
         if self._iframes > 0 or self._dashing:  # dash gives iframes
             return False
+        # Bone Buckler: absorb the first hit each room
+        if self.block_charge > 0:
+            self.block_charge -= 1
+            self._iframes = self.iframes_dur
+            self._flash = 0.12
+            return True   # hit registered (for spiked_shell etc.) but no HP lost
+        # Petrified Heart: 50 % damage reduction (ceiling-halve, min 1 for 1-dmg hits)
+        if self.petrified_heart:
+            amount = (amount + 1) // 2
         self.hp -= amount
         self._iframes = self.iframes_dur
         self._flash = 0.12

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from gamejam_may_2026.player import Player
     from gamejam_may_2026.dungeon import Dungeon
     from gamejam_may_2026.perks import Perk
+    from gamejam_may_2026.relics import Relic
     from gamejam_may_2026.camera import Camera
 
 # ── Font cache ────────────────────────────────────────────────────────────────
@@ -74,6 +75,16 @@ def draw_hud(
     room_label = _font(15).render(f"Room {room_num}", True, (105, 92, 80))
     surf.blit(floor_label, (C.SCREEN_W - 140, hud_y + 12))
     surf.blit(room_label, (C.SCREEN_W - 120, hud_y + 38))
+
+    # ── Relic icon strip (small icons left-aligned, second row) ──────────────
+    relics = getattr(player, 'relics', [])
+    if relics:
+        relic_fnt = _font(14)
+        rx = 12
+        for relic in relics:
+            ic = relic_fnt.render(relic.icon, True, (195, 175, 255))
+            surf.blit(ic, (rx, hud_y + 58))
+            rx += ic.get_width() + 3
 
     # ── Dash cooldown hint ────────────────────────────────────────────────────
     hint = _font(13).render("[SPACE] dash   [LMB] shoot", True, (70, 60, 50))
@@ -258,6 +269,75 @@ def draw_upgrade_screen(
     # Footer hint
     hint = _font(17).render("Click a card  or press  1 / 2 / 3", True, (100, 90, 70))
     hint_y = _upgrade_card_rect(0).bottom + 18
+    surf.blit(hint, (C.SCREEN_W // 2 - hint.get_width() // 2, hint_y))
+
+
+# ── Relic selection overlay ──────────────────────────────────────────────────
+
+def _relic_card_rect(idx: int) -> pygame.Rect:
+    """Return the screen rect for relic card *idx* (0 or 1) — 2 cards centred."""
+    total_w = 2 * UPGRADE_CARD_W + UPGRADE_CARD_GAP
+    start_x = (C.SCREEN_W - total_w) // 2
+    card_y  = C.PLAYFIELD_H // 2 - UPGRADE_CARD_H // 2
+    return pygame.Rect(
+        start_x + idx * (UPGRADE_CARD_W + UPGRADE_CARD_GAP),
+        card_y,
+        UPGRADE_CARD_W,
+        UPGRADE_CARD_H,
+    )
+
+
+def draw_relic_screen(
+    surf: pygame.Surface,
+    relics: list[Relic],
+    hovered: int = -1,
+) -> None:
+    """Full-screen relic chooser: dim overlay + 2 relic cards."""
+    overlay = pygame.Surface((C.SCREEN_W, C.SCREEN_H), pygame.SRCALPHA)
+    overlay.fill((15, 0, 30, 185))
+    surf.blit(overlay, (0, 0))
+
+    title = _font(38, bold=True).render("Choose a Relic", True, (200, 175, 255))
+    title_y = _relic_card_rect(0).top - 74
+    surf.blit(title, (C.SCREEN_W // 2 - title.get_width() // 2, title_y))
+
+    sub = _font(18).render("A permanent boon for the rest of the run", True, (120, 100, 165))
+    surf.blit(sub, (C.SCREEN_W // 2 - sub.get_width() // 2, title_y + 44))
+
+    for i, relic in enumerate(relics):
+        rect   = _relic_card_rect(i)
+        is_hov = (i == hovered)
+
+        bg_col     = (55, 38, 80) if is_hov else (28, 18, 48)
+        border_col = (200, 150, 255) if is_hov else (88, 60, 140)
+        name_col   = (240, 210, 255) if is_hov else (200, 170, 240)
+
+        pygame.draw.rect(surf, bg_col,     rect, border_radius=8)
+        pygame.draw.rect(surf, border_col, rect, 2, border_radius=8)
+
+        # [1] / [2] shortcut label
+        num = _font(16).render(f"[{i + 1}]", True, (135, 100, 185))
+        surf.blit(num, (rect.x + 10, rect.y + 8))
+
+        # Large icon
+        icon = _font(36, bold=True).render(relic.icon, True, name_col)
+        surf.blit(icon, (rect.centerx - icon.get_width() // 2, rect.y + 20))
+
+        # Relic name
+        name_surf = _font(23, bold=True).render(relic.name, True, name_col)
+        surf.blit(name_surf, (rect.centerx - name_surf.get_width() // 2, rect.y + 76))
+
+        # Divider
+        pygame.draw.line(surf, border_col,
+                         (rect.x + 16, rect.y + 108), (rect.right - 16, rect.y + 108), 1)
+
+        # Description
+        _draw_wrapped(surf, relic.desc, _font(16),
+                      rect.x + 16, rect.y + 116,
+                      rect.width - 32, (165, 140, 215))
+
+    hint = _font(17).render("Click a card  or press  1 / 2", True, (90, 70, 130))
+    hint_y = _relic_card_rect(0).bottom + 18
     surf.blit(hint, (C.SCREEN_W // 2 - hint.get_width() // 2, hint_y))
 
 
