@@ -61,6 +61,9 @@ uv run verdant-depths [--keys arrows|wasd|zqsd]
 | GoblinArcher | ranged | all | keeps distance, wind-up telegraph before shot |
 | Wolf | melee flanker | all | wobble approach + lunge dash when ≤130 px; HP 2/3/4 |
 | SporePlant | stationary ranged | all | alternating 4-way spore volleys (0°/45°); HP 5/7/9 |
+| **StoneCrawler** | melee chaser | **4+** | Armoured: first 3 arrow hits deflected (shell ring + pips); 2 dmg/contact; HP 8+; drops 4 coins |
+| **VenomfangBat** | fast melee | **4+** | Arc wobble movement (120 px/s perp.); poisons player for 3 s on contact; HP 2; drops 3 coins |
+| **CrystalTurret** | stationary ranged | **5+** | Rotating 3-way crystal volleys; immune from front ±60°, double damage from back; HP 10+; drops 5 coins |
 | **GoblinShaman** | **boss** | **1–2** | Bolt bursts + minion summons; 2 phases; see below |
 | **AncientTree** | **boss** | **3** | Root volleys + thorn rings; 2 phases; see below |
 
@@ -124,8 +127,8 @@ Override any track: drop `<name>.ogg` (or `.wav`) in `src/gamejam_may_2026/asset
 | 6 | ✅ done | Goblin Shaman + Ancient Tree bosses (2-phase, bolt/summon/root/thorn), boss HP bar, balance pass (floor-scaled enemy HP/speed), BFS deadlock fix, upgrade-click grace period, boss-gate hint tooltip |
 | 7 | ✅ done | Main menu (title + controls + best run), run-summary death/victory screens (floor/rooms/coins/time), high score (`~/.verdant-depths/highscore.json`, floors→rooms→coins sort) |
 | 8 | ✅ done | **Floor expansion** — 7 floors total; per-floor room count `max(5,floor+4)–min(14,floor+6)`; `_spawn_wave` table extended to floors 4–7; `GoblinArcher` floor-scaled; victory/UI strings updated to `/7` |
-| 9 | 🔜 next | **New enemies A** — StoneCrawler (armoured melee, deflect shell), VenomfangBat (fast arc mover, applies Poison on contact), CrystalTurret (rotating 3-laser volley, vulnerable from behind); added to `_spawn_wave` floors 4–5 |
-| 10 | 🔜 | **New enemies B** — ShadowWraith (teleporting homing-shot caster), BoneArcher (3-way spread + alternating bone spike), MagmaSlug (slow melee + burn-trail patches), VoidShrieker (death burst, camera shake on attack); added floors 5–7 |
+| 9 | ✅ done | **New enemies A** — StoneCrawler (armoured melee, deflect shell), VenomfangBat (fast arc mover, applies Poison on contact), CrystalTurret (rotating 3-laser volley, vulnerable from behind); added to `_spawn_wave` floors 4–5; fixed GoblinShaman/AncientTree double HP bar |
+| 10 | 🔜 next | **New enemies B** — ShadowWraith (teleporting homing-shot caster), BoneArcher (3-way spread + alternating bone spike), MagmaSlug (slow melee + burn-trail patches), VoidShrieker (death burst, camera shake on attack); added floors 5–7 |
 | 11 | 🔜 | **Relic system** — `relics.py` (20 relics, `Relic` dataclass with `apply(player)`); `RELIC` state between `FLOOR_CLEAR` and floor advance (pick 1 of 2 cards); `player.relics` list; relic icon strip in HUD |
 | 12 | 🔜 | **Status effects** — Poison, Slow, Burn, Stun, Bleed on `Enemy` base class (`tick_status(dt, particles)`) and Burn/Poison on `Player`; coloured status rings in draw; `arrow_poison`, `dash_stun`, `thorns` player flags |
 | 13 | 🔜 | **New bosses** — IronWarden (F4, stomp + shrapnel + charge), AbyssalLeech (F5, HP-stealing tendrils), FungalMatriarch (F6, summon Spore Elders + Bats), VoidSovereign (F7, shrinking void field + 8-way bursts) |
@@ -141,6 +144,21 @@ Override any track: drop `<name>.ogg` (or `.wav`) in `src/gamejam_may_2026/asset
 | Space | Dash (i-frames; cooldown arc shows recharge) |
 | R | Return to menu after death / victory |
 | Esc | Quit |
+
+## Known Issues
+
+| # | Symptom | Location | Notes |
+|---|---|---|---|
+| 1 | Flag-based perks (e.g. Piercing Shot, Double Shot) can be offered again after already being applied — the perk pool isn't filtered by what the player already has | `game.py` `_update_playing` / `perks.py` | Fix: before `random.sample(PERK_POOL, 3)` in chest spawn and shop generation, exclude perks whose flag is already `True` on `player` |
+| 2 | Minimap cells are too small (14×7 px cells + 2 px gap) — unreadable in practice | `ui.py` `draw_minimap` | Increase `CW`, `CH` and/or `STRIDE_*`; consider scaling based on dungeon extents so large floors don't push it off-screen |
+| 3 | ~~GoblinShaman (pink boss) shows a **double HP bar**~~ | ✅ **Fixed (Day 9)** | Removed redundant HP bars from both `GoblinShaman.draw` and `AncientTree.draw`; `ui.draw_boss_hpbar()` is the single source of truth |
+
+## Design Ideas
+
+| Idea | Description |
+|---|---|
+| **Rebound enemy** | A melee enemy that dashes very fast directly toward the player the moment it takes a hit — punishes reckless up-close shooting; pairs well with the dash i-frame mechanic |
+| **Mid-dash direction change** | Allow the player to steer the dash direction during its active window (especially relevant with Phantom Step / longer dashes); one approach: blend current dash dir with held movement keys at ~30 % per frame during the dash |
 
 ## Perks (12 total — `perks.py`)
 

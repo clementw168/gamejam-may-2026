@@ -140,3 +140,35 @@ C_TREE      = (38,  80, 25)
 C_TREE_DARK = (22,  50, 14)
 C_TREE_ROOT = (88,  55, 20)
 C_THORN     = (130, 195, 55)
+
+# ── Stone Crawler (floor 4+) ──────────────────────────────────────────────────
+CRAWLER_HP         = 8
+CRAWLER_RADIUS     = 16
+CRAWLER_SPEED      = 55.0
+CRAWLER_DAMAGE     = 2
+CRAWLER_COIN_DROP  = 4
+CRAWLER_SHELL_HITS = 3    # arrow deflects before shell breaks
+
+C_CRAWLER      = (138, 118, 92)
+C_CRAWLER_DARK = ( 85,  72, 56)
+
+# ── Venom Bat (floor 4+) ─────────────────────────────────────────────────────
+BAT_HP         = 2
+BAT_RADIUS     = 10
+BAT_SPEED      = 160.0
+BAT_COIN_DROP  = 3
+BAT_POISON_DUR = 3.0     # seconds of poison applied to player on contact
+
+C_BAT      = ( 95,  65, 135)
+C_BAT_DARK = ( 55,  38,  85)
+
+# ── Crystal Turret (floor 5+) ────────────────────────────────────────────────
+TURRET_HP         = 10
+TURRET_RADIUS     = 18
+TURRET_SHOOT_CD   = 2.5
+TURRET_PROJ_SPEED = 220.0
+TURRET_COIN_DROP  = 5
+
+C_TURRET      = ( 95, 180, 215)
+C_TURRET_DARK = ( 60, 115, 145)
+C_TURRET_BEAM = (175, 230, 255)

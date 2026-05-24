@@ -56,6 +56,10 @@ class Player:
         # Radius (collision)
         self.radius = C.PLAYER_RADIUS
 
+        # Poison status (applied by VenomfangBat)
+        self._poison_t    = 0.0   # seconds remaining
+        self._poison_tick = 0.0   # accumulator for 1 HP/s damage tick
+
         # Dead flag
         self.dead = False
 
@@ -110,9 +114,25 @@ class Player:
 
         # Timers
         self._shoot_cd = max(0.0, self._shoot_cd - dt)
-        self._iframes = max(0.0, self._iframes - dt)
-        self._flash = max(0.0, self._flash - dt)
-        self._dash_cd = max(0.0, self._dash_cd - dt)
+        self._iframes  = max(0.0, self._iframes  - dt)
+        self._flash    = max(0.0, self._flash    - dt)
+        self._dash_cd  = max(0.0, self._dash_cd  - dt)
+        if config.DEBUG:
+            self._dash_cd = 0.0   # infinite dash in debug mode
+
+        # Poison DoT — 1 HP/s, bypasses iframes
+        if self._poison_t > 0:
+            self._poison_t    = max(0.0, self._poison_t - dt)
+            self._poison_tick += dt
+            if self._poison_tick >= 1.0:
+                self._poison_tick = 0.0
+                self.hp -= 1
+                if self.hp <= 0:
+                    if config.DEBUG:
+                        self.hp = 1
+                    else:
+                        self.hp = 0
+                        self.dead = True
 
         if self._dashing:
             self._dash_timer -= dt
@@ -142,10 +162,23 @@ class Player:
         self.arrows = [a for a in self.arrows if a.alive]
 
     def _move(self, dx: float, dy: float, room: Room) -> None:
-        if room.is_circle_walkable(self.x + dx, self.y, self.radius):
-            self.x += dx
-        if room.is_circle_walkable(self.x, self.y + dy, self.radius):
-            self.y += dy
+        # Sub-step so the player slides right up to wall faces (no visible gap)
+        # and can't tunnel through thin geometry at dash speed.
+        _SUBSTEP = 2.0   # px per sub-step
+        steps = max(1, math.ceil(abs(dx) / _SUBSTEP))
+        sdx = dx / steps
+        for _ in range(steps):
+            if room.is_circle_walkable(self.x + sdx, self.y, self.radius):
+                self.x += sdx
+            else:
+                break
+        steps = max(1, math.ceil(abs(dy) / _SUBSTEP))
+        sdy = dy / steps
+        for _ in range(steps):
+            if room.is_circle_walkable(self.x, self.y + sdy, self.radius):
+                self.y += sdy
+            else:
+                break
 
     # ── Damage ─────────────────────────────────────────────────────────────────
     def take_damage(self, amount: int) -> bool:
@@ -156,8 +189,11 @@ class Player:
         self._iframes = self.iframes_dur
         self._flash = 0.12
         if self.hp <= 0:
-            self.hp = 0
-            self.dead = True
+            if config.DEBUG:
+                self.hp = 1   # HP floor — can't die in debug mode
+            else:
+                self.hp = 0
+                self.dead = True
         return True
 
     # ── Draw ───────────────────────────────────────────────────────────────────
@@ -172,6 +208,12 @@ class Player:
 
         color = (255, 255, 255) if self._flash > 0 else (C.C_DASH_TRAIL if self._dashing else C.C_PLAYER)
         dark = (80, 70, 60) if not self._dashing else (60, 100, 160)
+
+        # Poison glow ring
+        if self._poison_t > 0:
+            pulse = (math.sin(self._poison_t * 7.0) + 1.0) * 0.5
+            ring_r = self.radius + 4 + round(pulse * 3)
+            pygame.draw.circle(surf, (45, 205, 60), (sx, sy), ring_r, 2)
 
         # Shadow
         pygame.draw.circle(surf, (8, 8, 8), (sx + 2, sy + 4), self.radius - 2)

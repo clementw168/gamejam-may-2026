@@ -7,9 +7,10 @@ PLAYING       — normal gameplay
 TRANSITIONING — camera panning to the next room
 UPGRADE       — choosing a perk after clearing a room
 SHOP          — browsing the merchant room
-FLOOR_CLEAR   — floor boss killed; press Space to descend
+FLOOR_CLEAR   — floor boss killed; staircase spawned; press Space to descend
 VICTORY       — all 7 floors cleared
 DEAD          — player died; press R to return to menu
+PAUSED        — game frozen; press Esc to resume
 """
 
 from __future__ import annotations
@@ -21,11 +22,14 @@ from pathlib import Path
 
 import pygame
 
-from gamejam_may_2026 import constants as C
+from gamejam_may_2026 import config, constants as C
 from gamejam_may_2026 import sounds, ui
 from gamejam_may_2026.camera import Camera
 from gamejam_may_2026.dungeon import Dungeon, DungeonRoom
-from gamejam_may_2026.enemies import Enemy, GoblinArcher, GoblinRunner, SporePlant, Wolf
+from gamejam_may_2026.enemies import (
+    Enemy, GoblinArcher, GoblinRunner, SporePlant, Wolf,
+    StoneCrawler, VenomfangBat, CrystalTurret,
+)
 from gamejam_may_2026.particles import ParticleSystem
 from gamejam_may_2026.perks import Perk, PERK_POOL
 from gamejam_may_2026.player import Player
@@ -134,9 +138,12 @@ class Coin:
         dist_sq = dx * dx + dy * dy
         magnet_sq = player.magnet_range ** 2
         if dist_sq < magnet_sq and dist_sq > 0:
-            pull = 180.0 / math.sqrt(dist_sq)
-            self.x += dx / math.sqrt(dist_sq) * pull * dt
-            self.y += dy / math.sqrt(dist_sq) * pull * dt
+            dist = math.sqrt(dist_sq)
+            # Speed ramps from 320 px/s at the magnet edge to 920 px/s at the player
+            t = 1.0 - dist / player.magnet_range
+            speed = 320.0 + t * 600.0
+            self.x += dx / dist * speed * dt
+            self.y += dy / dist * speed * dt
         if dist_sq < self.PICKUP_R_SQ:
             self.collected = True
             player.coins += 1
@@ -155,29 +162,109 @@ class Coin:
         pygame.draw.circle(surf, (255, 245, 140), (sx - 2, sy - 2), 3)
 
 
+# ── Mossy Chest ───────────────────────────────────────────────────────────────
+
+class Chest:
+    """A vine-covered ruin-chest holding upgrade perks.
+
+    Spawns in the room centre after clearing a combat room (50 % chance).
+    Auto-opens when the player walks within OPEN_RADIUS px.
+    A short grace period prevents instant-open if the player was already there.
+    """
+
+    OPEN_RADIUS_SQ: float = 28 ** 2   # px²
+    _OPEN_DELAY:    float = 0.7        # s before the chest can be opened
+
+    def __init__(self, x: float, y: float, perks: list) -> None:
+        self.x = x
+        self.y = y
+        self.perks = perks
+        self.opened = False
+        self._pulse_t = random.uniform(0.0, 6.28)
+        self._age = 0.0
+
+    def update(self, dt: float, player: Player) -> bool:
+        """Tick; return True the frame the player opens this chest."""
+        self._pulse_t += dt * 2.5
+        self._age     += dt
+        if self.opened or self._age < self._OPEN_DELAY:
+            return False
+        if (player.x - self.x) ** 2 + (player.y - self.y) ** 2 < self.OPEN_RADIUS_SQ:
+            self.opened = True
+            return True
+        return False
+
+    def draw(self, surf: pygame.Surface, camera: Camera) -> None:
+        if self.opened:
+            return
+        sx, sy = camera.apply_pos(self.x, self.y)
+        sx, sy = round(sx), round(sy)
+
+        pulse = (math.sin(self._pulse_t) + 1.0) * 0.5   # 0..1
+
+        # Amber glow
+        gr = 20 + round(pulse * 8)
+        glow = pygame.Surface((gr * 2, gr * 2), pygame.SRCALPHA)
+        pygame.draw.circle(glow, (190, 155, 30, int(42 + pulse * 36)), (gr, gr), gr)
+        surf.blit(glow, (sx - gr, sy - gr))
+
+        w, h = 22, 16
+        # Drop-shadow
+        pygame.draw.rect(surf, (8, 5, 2), (sx - w // 2 + 2, sy - h // 2 + 3, w, h))
+        # Body
+        pygame.draw.rect(surf, (84, 52, 23), (sx - w // 2, sy - h // 2, w, h))
+        # Lid (top ~38 %)
+        lid_h = 6
+        pygame.draw.rect(surf, (112, 70, 32), (sx - w // 2, sy - h // 2, w, lid_h))
+        # Gold band
+        pygame.draw.rect(surf, (192, 154, 32), (sx - w // 2, sy - h // 2 + lid_h - 1, w, 2))
+        # Gold clasp
+        pygame.draw.circle(surf, (210, 172, 42), (sx, sy - h // 2 + lid_h + 1), 3)
+        # Moss patches (ruins feel)
+        pygame.draw.circle(surf, (50, 126, 34), (sx - 7, sy),     3)
+        pygame.draw.circle(surf, (40, 110, 26), (sx + 6, sy + 3), 2)
+        # Border
+        pygame.draw.rect(surf, (140, 90, 40), (sx - w // 2, sy - h // 2, w, h), 1)
+
+        # Hint label (fades in after grace period)
+        if self._age > self._OPEN_DELAY:
+            lbl = pygame.font.SysFont("monospace", 12).render("walk over", True, (165, 145, 72))
+            surf.blit(lbl, (sx - lbl.get_width() // 2, sy - h // 2 - 14))
+
+
 # ── Spawn wave ─────────────────────────────────────────────────────────────────
 
 def _spawn_wave(room: Room, floor: int, room_num: int = 1) -> list[Enemy]:
     """Scale enemy variety with room_num; scale counts and stats with floor."""
     depth = min(room_num, 3)
     fl    = min(floor,    7)
-    #                             F1  F2  F3  F4  F5  F6  F7
-    runners = (2, 3, 4, 4, 5, 5, 6)[fl - 1]
-    wolves  = (1, 1, 2, 2, 2, 3, 3)[fl - 1]
-    archers = (1, 2, 2, 3, 3, 4, 4)[fl - 1] if depth >= 2 else 0
-    plants  = (1, 1, 2, 2, 3, 3, 4)[fl - 1] if depth >= 3 else 0
+    #                              F1  F2  F3  F4  F5  F6  F7
+    runners  = (2, 3, 4, 4, 5, 5, 6)[fl - 1]
+    wolves   = (1, 1, 2, 2, 2, 3, 3)[fl - 1]
+    archers  = (1, 2, 2, 3, 3, 4, 4)[fl - 1] if depth >= 2 else 0
+    plants   = (1, 1, 2, 2, 3, 3, 4)[fl - 1] if depth >= 3 else 0
+    crawlers = (0, 0, 0, 1, 1, 2, 2)[fl - 1]   # floor 4+ — armoured melee
+    bats     = (0, 0, 0, 1, 2, 2, 3)[fl - 1]   # floor 4+ — fast arc mover
+    turrets  = (0, 0, 0, 0, 1, 1, 2)[fl - 1]   # floor 5+ — stationary, directional
 
-    positions = room.get_spawn_positions(runners + wolves + archers + plants)
+    total = runners + wolves + archers + plants + crawlers + bats + turrets
+    positions = room.get_spawn_positions(total)
     idx  = 0
     wave: list[Enemy] = []
     for _ in range(runners):
-        if idx < len(positions): wave.append(GoblinRunner(*positions[idx], floor=floor)); idx += 1
+        if idx < len(positions): wave.append(GoblinRunner(*positions[idx], floor=floor));  idx += 1
     for _ in range(wolves):
-        if idx < len(positions): wave.append(Wolf(*positions[idx], floor=floor));         idx += 1
+        if idx < len(positions): wave.append(Wolf(*positions[idx], floor=floor));          idx += 1
     for _ in range(archers):
-        if idx < len(positions): wave.append(GoblinArcher(*positions[idx], floor=floor)); idx += 1
+        if idx < len(positions): wave.append(GoblinArcher(*positions[idx], floor=floor));  idx += 1
     for _ in range(plants):
-        if idx < len(positions): wave.append(SporePlant(*positions[idx], floor=floor));   idx += 1
+        if idx < len(positions): wave.append(SporePlant(*positions[idx], floor=floor));    idx += 1
+    for _ in range(crawlers):
+        if idx < len(positions): wave.append(StoneCrawler(*positions[idx], floor=floor));  idx += 1
+    for _ in range(bats):
+        if idx < len(positions): wave.append(VenomfangBat(*positions[idx], floor=floor));  idx += 1
+    for _ in range(turrets):
+        if idx < len(positions): wave.append(CrystalTurret(*positions[idx], floor=floor)); idx += 1
     return wave
 
 
@@ -223,6 +310,7 @@ class Game:
         self.enemies:           list[Enemy]            = _spawn_wave(dr.room, self.dungeon.floor, self.room_num)
         self.enemy_projectiles: list[EnemyProjectile]  = []
         self.coins:             list[Coin]             = []
+        self.chests:            list[Chest]            = []
 
         # Transition state
         self._trans_t:        float                    = 0.0
@@ -243,6 +331,15 @@ class Game:
         self._boss_hint_t:   float = 0.0   # seconds remaining
         self._boss_hint_dir: str   = "N"   # which door triggered it
 
+        # Descent staircase (spawns in boss room after clearing)
+        self._show_staircase: bool  = False
+        self._staircase_x:    float = 0.0
+        self._staircase_y:    float = 0.0
+        self._staircase_t:    float = 0.0   # animation clock
+
+        # Pause state
+        self._pre_pause_state: str = "PLAYING"
+
         # Run statistics (accumulate across floors)
         self._run_start:            float = time.monotonic()
         self._rooms_cleared_total:  int   = 0
@@ -259,11 +356,25 @@ class Game:
 
     # ── Events ────────────────────────────────────────────────────────────────
     def handle_event(self, event: pygame.event.Event) -> None:
+        # Escape toggles pause from any live gameplay state
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            if self.state in ("PLAYING", "UPGRADE", "SHOP", "FLOOR_CLEAR"):
+                self._pre_pause_state = self.state
+                self.state = "PAUSED"
+                return
+            elif self.state == "PAUSED":
+                self.state = self._pre_pause_state
+                return
+
         if self.state == "MENU":
-            # Any key (Esc is handled in main.py) or mouse click starts a run
+            # Any key (Esc quits from MENU — handled in main.py) or click starts run
             if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
                 self._new_game()
+        elif self.state == "PAUSED":
+            self._handle_pause_event(event)
         elif self.state == "PLAYING":
+            if config.DEBUG and event.type == pygame.KEYDOWN and event.key == pygame.K_k:
+                self._debug_kill_all()
             self.player.handle_event(event, self.particles)
         elif self.state == "UPGRADE":
             self._handle_upgrade_event(event)
@@ -276,7 +387,7 @@ class Game:
                 self._next_floor()
         elif self.state in ("DEAD", "VICTORY"):
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                self.state = "MENU"   # return to menu; R at menu starts a fresh run
+                self.state = "MENU"
 
     # Grace period (ms) before mouse clicks are accepted on the upgrade screen.
     # Prevents an in-flight shoot-click from instantly picking a perk the player
@@ -302,6 +413,18 @@ class Game:
                 self._pick_perk(1)
             elif event.key in (pygame.K_3, pygame.K_KP3):
                 self._pick_perk(2)
+
+    def _handle_pause_event(self, event: pygame.event.Event) -> None:
+        """P key resumes; clicking Resume or Main Menu acts accordingly."""
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_p:
+            self.state = self._pre_pause_state
+            return
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            resume_rect, menu_rect = ui.pause_button_rects()
+            if resume_rect.collidepoint(event.pos):
+                self.state = self._pre_pause_state
+            elif menu_rect.collidepoint(event.pos):
+                self.state = "MENU"
 
     def _upgrade_card_at(self, mx: int, my: int) -> int:
         """Return 0/1/2 if (mx, my) is inside that card, else -1."""
@@ -390,8 +513,11 @@ class Game:
         self.enemies           = _spawn_wave(dr.room, next_floor, self.room_num)
         self.enemy_projectiles = []
         self.coins             = []
+        self.chests            = []
         self.camera            = Camera()
         self._boss_hint_t      = 0.0
+        self._show_staircase   = False
+        self._staircase_t      = 0.0
         self.state             = "PLAYING"
 
     # ── Boss-gate helpers ─────────────────────────────────────────────────────
@@ -426,14 +552,18 @@ class Game:
 
     # ── Update ────────────────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
-        if self.state == "MENU":
-            return   # nothing to tick on the title screen
+        if self.state in ("MENU", "PAUSED"):
+            return   # PAUSED freezes everything; MENU has nothing to tick
         self.camera.update(dt)
+        if self._show_staircase:
+            self._staircase_t += dt
         if self.state == "PLAYING":
             self._update_playing(dt)
+        elif self.state == "FLOOR_CLEAR":
+            self._update_floor_clear(dt)
         elif self.state == "TRANSITIONING":
             self._update_transitioning(dt)
-        # UPGRADE and DEAD: gameplay frozen — particles still tick (ambient feel)
+        # UPGRADE, DEAD: gameplay frozen — particles still tick (ambient feel)
         self.particles.update(dt)
 
     def _update_playing(self, dt: float) -> None:
@@ -509,7 +639,20 @@ class Game:
                     arrow.hit_enemies.add(id(enemy))
                     if not arrow.piercing:
                         arrow.alive = False
-                    enemy.take_hit(arrow.damage, self.particles)
+                    # CrystalTurret directional vulnerability
+                    actual_dmg = arrow.damage
+                    if isinstance(enemy, CrystalTurret):
+                        impact = math.atan2(arrow.y - enemy.y, arrow.x - enemy.x)
+                        diff   = math.atan2(
+                            math.sin(impact - enemy._face_angle),
+                            math.cos(impact - enemy._face_angle),
+                        )
+                        if abs(diff) < math.pi / 3:        # front ±60° — immune
+                            actual_dmg = 0
+                        elif abs(diff) > math.pi * 2 / 3:  # back 120° — double
+                            actual_dmg = arrow.damage * 2
+                    if actual_dmg > 0:
+                        enemy.take_hit(actual_dmg, self.particles)
                     self.camera.add_shake(3)
                     if getattr(enemy, 'phase2_just_triggered', False):
                         enemy.phase2_just_triggered = False
@@ -536,6 +679,17 @@ class Game:
                 self._coins_collected_total += 1
         self.coins = [c for c in self.coins if not c.collected]
 
+        # ── Chests ────────────────────────────────────────────────────────────
+        for chest in self.chests:
+            if chest.update(dt, self.player):
+                self._upgrade_perks   = chest.perks
+                self._upgrade_hovered = -1
+                self._upgrade_open_ms = pygame.time.get_ticks()
+                self.chests = [c for c in self.chests if not c.opened]
+                self.state = "UPGRADE"
+                return
+        self.chests = [c for c in self.chests if not c.opened]
+
         # ── Room-clear check ──────────────────────────────────────────────────
         if not self.enemies and not dr.cleared:
             dr.cleared = True
@@ -545,24 +699,37 @@ class Game:
             cy = float(C.ROOM_PIXEL_H // 2)
             self.particles.emit_room_clear(cx, cy)
             if dr.is_boss:
-                # Boss killed — advance floor or declare victory
+                # Boss killed — spawn staircase; player walks to it (or presses Space)
                 if self.dungeon.floor >= 7:
                     self._finish_run()
                     self.state = "VICTORY"
                 else:
+                    sx, sy = room.find_spawn_near_centre(20.0)
+                    self._staircase_x    = sx
+                    self._staircase_y    = sy
+                    self._staircase_t    = 0.0
+                    self._show_staircase = True
                     self.state = "FLOOR_CLEAR"
                 return
             elif not dr.is_start and not dr.is_shop:
-                # Normal combat room — offer upgrade (never for start room)
-                self._upgrade_perks   = random.sample(PERK_POOL, 3)
-                self._upgrade_hovered = -1
-                self._upgrade_open_ms = pygame.time.get_ticks()
-                self.state = "UPGRADE"
-                return   # don't process exits until after perk is chosen
+                # Normal combat room — 50 % chance to spawn a mossy chest
+                if random.random() < 0.5:
+                    cx2, cy2 = room.find_spawn_near_centre(28.0)
+                    self.chests.append(Chest(cx2, cy2, random.sample(PERK_POOL, 3)))
 
         # ── Door-exit detection (only when cleared) ────────────────────────────
         if dr.cleared:
             self._check_door_exit()
+
+    def _update_floor_clear(self, dt: float) -> None:
+        """Player can move freely during the floor-clear overlay; walking into
+        the staircase descends to the next floor (Space is the fallback)."""
+        self.player.update(dt, self._room, self.particles)
+        if self._show_staircase:
+            dx = self.player.x - self._staircase_x
+            dy = self.player.y - self._staircase_y
+            if dx * dx + dy * dy < 40.0 ** 2:
+                self._next_floor()
 
     def _check_door_exit(self) -> None:
         p      = self.player
@@ -623,9 +790,11 @@ class Game:
     def _commit_transition(self) -> None:
         assert self._trans_next is not None
         next_dr       = self._trans_next
+        if not next_dr.visited:   # only count first-time entries
+            self.room_num += 1
         next_dr.visited = True
         self.dungeon.current = next_dr
-        self.room_num += 1
+        self.chests.clear()   # chests belong to the room we just left
 
         # Convert player from world-space back to local room coords
         self.player.x -= self._trans_wdx
@@ -672,6 +841,14 @@ class Game:
             oy = random.uniform(-24, 24)
             self.coins.append(Coin(enemy.x + ox, enemy.y + oy))
 
+    def _debug_kill_all(self) -> None:
+        """[DEBUG] Instantly kill every living enemy in the current room."""
+        for e in self.enemies:
+            if e.alive:
+                e.take_hit(max(e.hp, 9999), self.particles)
+                if not e.alive:
+                    self._drop_coins(e)
+
     # ── Draw ──────────────────────────────────────────────────────────────────
     def draw(self) -> None:
         self.screen.fill(C.C_BG)
@@ -705,6 +882,7 @@ class Game:
             floor_num    = self.dungeon.floor,
             room_num     = self.room_num,
             enemies_left = len(self.enemies),
+            debug        = config.DEBUG,
         )
         ui.draw_minimap(self.screen, self.dungeon)
 
@@ -718,6 +896,15 @@ class Game:
             ui.draw_upgrade_screen(self.screen, self._upgrade_perks, self._upgrade_hovered)
         elif self.state == "SHOP":
             ui.draw_shop_screen(self.screen, self._dr.shop_items, self.player, self._shop_hovered)
+        elif self.state == "PAUSED":
+            # Re-draw whichever overlay was active before pausing, then the pause screen on top
+            if self._pre_pause_state == "UPGRADE":
+                ui.draw_upgrade_screen(self.screen, self._upgrade_perks, self._upgrade_hovered)
+            elif self._pre_pause_state == "SHOP":
+                ui.draw_shop_screen(self.screen, self._dr.shop_items, self.player, self._shop_hovered)
+            elif self._pre_pause_state == "FLOOR_CLEAR":
+                ui.draw_floor_clear(self.screen, self.dungeon.floor)
+            ui.draw_pause_screen(self.screen)
 
     def _draw_playing(self) -> None:
         dr   = self._dr
@@ -743,6 +930,11 @@ class Game:
 
         for coin in self.coins:
             coin.draw(self.screen, cam)
+        for chest in self.chests:
+            chest.draw(self.screen, cam)
+        if self._show_staircase:
+            ui.draw_staircase(self.screen, cam,
+                              self._staircase_x, self._staircase_y, self._staircase_t)
         for e in self.enemies:
             e.draw(self.screen, cam)
         for ep in self.enemy_projectiles:

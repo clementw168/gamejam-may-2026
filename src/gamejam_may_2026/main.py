@@ -19,10 +19,16 @@ def _parse_args() -> None:
         "--keys",
         choices=["arrows", "wasd", "zqsd"],
         default="zqsd",
-        help="Key layout for movement  (default: arrows)",
+        help="Key layout for movement  (default: zqsd)",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug mode: infinite dash, HP floor 1, K kills all enemies",
     )
     args = parser.parse_args()
     config.KEY_LAYOUT = args.keys
+    config.DEBUG      = args.debug
 
 
 def main() -> None:
@@ -48,8 +54,10 @@ def main() -> None:
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                pygame.quit()
-                sys.exit()
+                if game.state == "MENU":
+                    pygame.quit()
+                    sys.exit()
+                # All other states: forward to game (Esc toggles pause)
             game.handle_event(event)
 
         game.update(dt)
