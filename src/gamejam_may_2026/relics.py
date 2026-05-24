@@ -56,7 +56,7 @@ def _bone_buckler(p: Player) -> None:
 
 
 def _coin_fed_heart(p: Player) -> None:
-    """Restore 1 HP every 10 coins collected."""
+    """Restore 1 HP every 100 coins collected."""
     p.coin_fed_heart = True
 
 
@@ -71,7 +71,7 @@ def _phase_cloak(p: Player) -> None:
 
 
 def _leech_stone(p: Player) -> None:
-    """Killing 5 enemies restores 1 HP."""
+    """Killing 50 enemies restores 1 HP."""
     p.leech_stone = True
 
 
@@ -139,10 +139,10 @@ RELIC_POOL: list[Relic] = [
     Relic("venom_gland",       "Venom Gland",        "Arrows poison enemies on hit (1 HP/s, 4 s).", "🐍", _venom_gland),
     Relic("iron_lungs",        "Iron Lungs",         "Dash cooldown −50 %. Dashing through enemies deals 1 damage.", "💨", _iron_lungs),
     Relic("bone_buckler",      "Bone Buckler",       "First hit each room is completely absorbed.", "🦴", _bone_buckler),
-    Relic("coin_fed_heart",    "Coin-Fed Heart",     "Restore 1 HP for every 10 coins picked up.", "💰", _coin_fed_heart),
+    Relic("coin_fed_heart",    "Coin-Fed Heart",     "Restore 1 HP for every 100 coins picked up.", "💰", _coin_fed_heart),
     Relic("shrapnel_tips",     "Shrapnel Tips",      "Arrow wall-impacts release 3 shrapnel in a ±30° fan.", "💥", _shrapnel_tips),
     Relic("phase_cloak",       "Phase Cloak",        "Dashing through an enemy stuns it for 0.8 s.", "👻", _phase_cloak),
-    Relic("leech_stone",       "Leech Stone",        "Restore 1 HP after killing 5 enemies.", "🩸", _leech_stone),
+    Relic("leech_stone",       "Leech Stone",        "Restore 1 HP after killing 50 enemies.", "🩸", _leech_stone),
     Relic("overcharged_quiver","Overcharged Quiver", "Every 4th arrow fired deals triple damage.", "⚡", _overcharged_quiver),
     Relic("ancient_sigil",     "Ancient Sigil",      "Entering a new room grants 1 s of invincibility.", "✦", _ancient_sigil),
     Relic("echo_chamber",      "Echo Chamber",       "Coin magnet range ×3.", "🔊", _echo_chamber),

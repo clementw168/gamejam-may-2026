@@ -461,6 +461,10 @@ class Game:
         self._new_game()
         self.state = "MENU"
 
+        # Codex browsing state (persists across runs, independent of game state)
+        self._codex_tab: int = 0
+        self._codex_scroll: int = 0
+
     # ── Init ──────────────────────────────────────────────────────────────────
     def _new_game(self) -> None:
         self.state = "PLAYING"
@@ -511,6 +515,7 @@ class Game:
         self._staircase_x: float = 0.0
         self._staircase_y: float = 0.0
         self._staircase_t: float = 0.0  # animation clock
+        self._ladder_ready: bool = False  # True after relic pick; walk to staircase to descend
 
         # Pause state
         self._pre_pause_state: str = "PLAYING"
@@ -545,9 +550,27 @@ class Game:
                 return
 
         if self.state == "MENU":
-            # Any key (Esc quits from MENU — handled in main.py) or click starts run
-            if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
+            # C opens the Codex; any other key/click starts a new run
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_c:
+                self._codex_tab = 0
+                self._codex_scroll = 0
+                self.state = "CODEX"
+            elif event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
                 self._new_game()
+        elif self.state == "CODEX":
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.state = "MENU"
+                elif event.key in (pygame.K_LEFT,):
+                    self._codex_tab = (self._codex_tab - 1) % len(ui._CODEX_TABS)
+                    self._codex_scroll = 0
+                elif event.key in (pygame.K_RIGHT,):
+                    self._codex_tab = (self._codex_tab + 1) % len(ui._CODEX_TABS)
+                    self._codex_scroll = 0
+                elif event.key == pygame.K_UP:
+                    self._codex_scroll = max(0, self._codex_scroll - 40)
+                elif event.key == pygame.K_DOWN:
+                    self._codex_scroll += 40
         elif self.state == "PAUSED":
             self._handle_pause_event(event)
         elif self.state == "PLAYING":
@@ -610,7 +633,8 @@ class Game:
         held_ids = {r.id for r in self.player.relics}
         available = [r for r in RELIC_POOL if r.id not in held_ids]
         if not available:
-            self._next_floor()
+            self._ladder_ready = True
+            self.state = "PLAYING"
             return
         self._relic_choices = random.sample(available, min(2, len(available)))
         self._relic_hovered = -1
@@ -643,7 +667,9 @@ class Game:
             self.player.relics.append(relic)
         self._relic_choices = []
         self._relic_hovered = -1
-        self._next_floor()
+        # Return to PLAYING so the player can freely explore before descending
+        self._ladder_ready = True
+        self.state = "PLAYING"
 
     def _upgrade_card_at(self, mx: int, my: int) -> int:
         """Return 0/1/2 if (mx, my) is inside that card, else -1."""
@@ -691,7 +717,7 @@ class Game:
             if self.player.hp >= self.player.max_hp:
                 return  # greyed out — nothing to restore
             self.player.hp += 1
-            # HP vials are reusable; don't mark bought
+            # HP vials are reusable (don't mark bought)
         else:  # perk
             item["perk"].apply(self.player)
             item["bought"] = True
@@ -701,20 +727,26 @@ class Game:
     def _open_shop(self, dr: DungeonRoom) -> None:
         """Generate shop items on first entry, then switch to SHOP state."""
         if not dr.shop_items:
-            # Always slot 0: HP vial
+            fl = min(self.dungeon.floor, 7) - 1  # 0-based index
+            hp_price   = C.SHOP_HP_PRICE[fl]
+            perk_price = C.SHOP_PERK_PRICE[fl]
+            # Slot 0: HP vial (once per floor)
             dr.shop_items.append(
-                {"kind": "hp", "cost": 5, "label": "Heart Vial", "desc": "Restore 1 HP.", "icon": "♥", "bought": False}
+                {"kind": "hp", "cost": hp_price, "label": "Heart Vial",
+                 "desc": "Restore 1 HP.", "icon": "♥", "icon_id": "heart_vial",
+                 "bought": False}
             )
-            # Slots 1 & 2: two distinct random perks
-            chosen = random.sample(_available_perks(self.player), 2)
+            # Slot 1: one random perk
+            chosen = random.sample(_available_perks(self.player), 1)
             for perk in chosen:
                 dr.shop_items.append(
                     {
                         "kind": "perk",
-                        "cost": 8,
+                        "cost": perk_price,
                         "label": perk.name,
                         "desc": perk.desc,
                         "icon": perk.icon,
+                        "icon_id": perk.id,
                         "perk": perk,
                         "bought": False,
                     }
@@ -746,6 +778,7 @@ class Game:
         self._boss_hint_t = 0.0
         self._show_staircase = False
         self._staircase_t = 0.0
+        self._ladder_ready = False
         self._void_flash_t = 0.0
         self._burn_dot_acc = 0.0
 
@@ -789,8 +822,8 @@ class Game:
 
     # ── Update ────────────────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
-        if self.state in ("MENU", "PAUSED"):
-            return  # PAUSED freezes everything; MENU has nothing to tick
+        if self.state in ("MENU", "PAUSED", "CODEX"):
+            return  # PAUSED/CODEX freeze everything; MENU has nothing to tick
         self.camera.update(dt)
         if self._show_staircase:
             self._staircase_t += dt
@@ -1017,10 +1050,10 @@ class Game:
                                             piercing=self.player.piercing,
                                         )
                                     )
-                        # Leech Stone: +1 HP every 5 kills
+                        # Leech Stone: +1 HP every 50 kills
                         if self.player.leech_stone:
                             self.player._leech_kills += 1
-                            if self.player._leech_kills >= 5:
+                            if self.player._leech_kills >= 50:
                                 self.player._leech_kills = 0
                                 if self.player.hp < self.player.max_hp:
                                     self.player.hp += 1
@@ -1078,10 +1111,10 @@ class Game:
             if coin.update(dt, self.player, self.particles):
                 sounds.play("coin")
                 self._coins_collected_total += 1
-                # Coin-Fed Heart: +1 HP every 10 coins (can't over-heal if Petrified Heart)
+                # Coin-Fed Heart: +1 HP every 100 coins (can't over-heal if Petrified Heart)
                 if self.player.coin_fed_heart:
                     self.player._coin_fed_acc += 1
-                    if self.player._coin_fed_acc >= 10:
+                    if self.player._coin_fed_acc >= 100:
                         self.player._coin_fed_acc = 0
                         if self.player.hp < self.player.max_hp and not self.player.petrified_heart:
                             self.player.hp += 1
@@ -1134,6 +1167,14 @@ class Game:
                 self.state = "UPGRADE"
                 return
         self.chests = [c for c in self.chests if not c.opened]
+
+        # ── Ladder descent (after relic pick, player walks back to staircase) ──
+        if self._ladder_ready and dr.is_boss and self._show_staircase:
+            dx = self.player.x - self._staircase_x
+            dy = self.player.y - self._staircase_y
+            if dx * dx + dy * dy < 40.0**2:
+                self._next_floor()
+                return
 
         # ── Room-clear check ──────────────────────────────────────────────────
         if not self.enemies and not dr.cleared:
@@ -1321,6 +1362,10 @@ class Game:
             ui.draw_menu(self.screen, self._highscore)
             return
 
+        if self.state == "CODEX":
+            ui.draw_codex(self.screen, self._codex_tab, self._codex_scroll)
+            return
+
         if self.state == "TRANSITIONING":
             self._draw_transitioning()
         else:
@@ -1414,8 +1459,8 @@ class Game:
             coin.draw(self.screen, cam)
         for chest in self.chests:
             chest.draw(self.screen, cam)
-        if self._show_staircase:
-            ui.draw_staircase(self.screen, cam, self._staircase_x, self._staircase_y, self._staircase_t)
+        if self._show_staircase and dr.is_boss:
+            ui.draw_staircase(self.screen, cam, self._staircase_x, self._staircase_y, self._staircase_t, self._ladder_ready)
         for e in self.enemies:
             e.draw(self.screen, cam)
         for ep in self.enemy_projectiles:

@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 import pygame
 from gamejam_may_2026 import constants as C
+from gamejam_may_2026 import icons
 
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
@@ -67,7 +68,7 @@ def draw_hud(
 
     # ── Enemies left ──────────────────────────────────────────────────────────
     if enemies_left > 0:
-        label = _font(18).render(f"☠ {enemies_left}", True, (200, 80, 80))
+        label = _font(18).render(f"! {enemies_left}", True, (200, 80, 80))
         surf.blit(label, (C.SCREEN_W // 2 - label.get_width() // 2, cy - 10))
 
     # ── Floor / room ──────────────────────────────────────────────────────────
@@ -79,12 +80,13 @@ def draw_hud(
     # ── Relic icon strip (small icons left-aligned, second row) ──────────────
     relics = getattr(player, 'relics', [])
     if relics:
-        relic_fnt = _font(14)
+        icon_size = 16
         rx = 12
+        iy = hud_y + 58 + icon_size // 2   # vertical centre of icon row
         for relic in relics:
-            ic = relic_fnt.render(relic.icon, True, (195, 175, 255))
-            surf.blit(ic, (rx, hud_y + 58))
-            rx += ic.get_width() + 3
+            icons.draw(surf, rx + icon_size // 2, iy,
+                       icon_size, relic.id, (195, 175, 255))
+            rx += icon_size + 4
 
     # ── Dash cooldown hint ────────────────────────────────────────────────────
     hint = _font(13).render("[SPACE] dash   [LMB] shoot", True, (70, 60, 50))
@@ -92,7 +94,7 @@ def draw_hud(
 
     # ── Debug banner ─────────────────────────────────────────────────────────
     if debug:
-        dbg = _font(14, bold=True).render("⚙ DEBUG  [K] kill all", True, (255, 80, 80))
+        dbg = _font(14, bold=True).render("[DEBUG]  K = kill all", True, (255, 80, 80))
         surf.blit(dbg, (C.SCREEN_W // 2 - dbg.get_width() // 2, hud_y + C.HUD_H - 18))
 
 
@@ -150,7 +152,7 @@ def draw_death_screen(
     # High-score line
     hs_y = stats_bottom + 14
     if new_highscore:
-        best = _font(26, bold=True).render("✦  NEW BEST RUN!  ✦", True, (255, 215, 55))
+        best = _font(26, bold=True).render("*  NEW BEST RUN!  *", True, (255, 215, 55))
         surf.blit(best, (cx - best.get_width() // 2, hs_y))
         hs_y += best.get_height() + 4
     elif highscore and highscore.get("floors", 0) > 0:
@@ -250,8 +252,9 @@ def draw_upgrade_screen(
         surf.blit(num, (rect.x + 10, rect.y + 8))
 
         # Icon
-        icon = _font(30, bold=True).render(perk.icon, True, name_col)
-        surf.blit(icon, (rect.right - icon.get_width() - 10, rect.y + 8))
+        icon_size = 28
+        icons.draw(surf, rect.right - icon_size // 2 - 10, rect.y + 8 + icon_size // 2,
+                   icon_size, perk.id, name_col)
 
         # Perk name
         name_surf = _font(23, bold=True).render(perk.name, True, name_col)
@@ -320,8 +323,9 @@ def draw_relic_screen(
         surf.blit(num, (rect.x + 10, rect.y + 8))
 
         # Large icon
-        icon = _font(36, bold=True).render(relic.icon, True, name_col)
-        surf.blit(icon, (rect.centerx - icon.get_width() // 2, rect.y + 20))
+        icon_size = 36
+        icons.draw(surf, rect.centerx, rect.y + 20 + icon_size // 2,
+                   icon_size, relic.id, name_col)
 
         # Relic name
         name_surf = _font(23, bold=True).render(relic.name, True, name_col)
@@ -366,7 +370,7 @@ def draw_boss_gate_hint(
     if alpha <= 0:
         return
 
-    label = _font(17, bold=True).render("⚔  Clear every room to open the gate", True, (220, 180, 75))
+    label = _font(17, bold=True).render("[!]  Clear every room to open the gate", True, (220, 180, 75))
     pad   = 7
     w     = label.get_width() + pad * 2
     h     = label.get_height() + pad * 2
@@ -603,8 +607,9 @@ def draw_shop_screen(
         surf.blit(badge, (rect.right - badge.get_width() - 10, rect.y + 10))
 
         # Icon
-        icon = _font(28, bold=True).render(item.get("icon", "?"), True, name_col)
-        surf.blit(icon, (rect.centerx - icon.get_width() // 2, rect.y + 38))
+        icon_size = 28
+        icons.draw(surf, rect.centerx, rect.y + 38 + icon_size // 2,
+                   icon_size, item.get("icon_id", "heart_vial"), name_col)
 
         # Name
         name_surf = _font(21, bold=True).render(item["label"], True, name_col)
@@ -696,6 +701,11 @@ def draw_menu(surf: pygame.Surface, highscore: dict) -> None:
         no_hs = _font(16).render("No runs yet — be the first!", True, (65, 100, 55))
         surf.blit(no_hs, (cx - no_hs.get_width() // 2, best_top + 4))
 
+    # Codex hint (bottom-right corner)
+    codex_hint = _font(16).render("[C]  View Codex", True, (55, 100, 50))
+    surf.blit(codex_hint, (C.SCREEN_W - codex_hint.get_width() - 16,
+                            C.SCREEN_H - codex_hint.get_height() - 10))
+
 
 # ── Floor-clear overlay ───────────────────────────────────────────────────────
 
@@ -714,7 +724,7 @@ def draw_floor_clear(surf: pygame.Surface, floor: int) -> None:
     sub = _font(24).render("The ancient staircase has opened…", True, (150, 200, 115))
     surf.blit(sub, (cx - sub.get_width() // 2, cy - 20))
 
-    sub2 = _font(20).render(f"Descending to floor {floor + 1}", True, (120, 160, 88))
+    sub2 = _font(20).render("Walk to the staircase to choose a relic, then descend when ready.", True, (120, 160, 88))
     surf.blit(sub2, (cx - sub2.get_width() // 2, cy + 16))
 
     hint = _font(20).render("Press  SPACE  to descend", True, (115, 105, 72))
@@ -748,7 +758,7 @@ def draw_victory(
     # New best banner
     hs_y = stats_bottom + 14
     if new_highscore:
-        best = _font(26, bold=True).render("✦  NEW BEST RUN!  ✦", True, (255, 215, 55))
+        best = _font(26, bold=True).render("*  NEW BEST RUN!  *", True, (255, 215, 55))
         surf.blit(best, (cx - best.get_width() // 2, hs_y))
         hs_y += best.get_height() + 4
 
@@ -764,6 +774,7 @@ def draw_staircase(
     x: float,
     y: float,
     t: float,
+    ready: bool = False,
 ) -> None:
     """Stone staircase descending into the earth — appears after the boss dies."""
     sx, sy = camera.apply_pos(x, y)
@@ -803,8 +814,14 @@ def draw_staircase(
         pygame.draw.line(surf, (38, 88, 28),
                          (rx, ry + h - 2), (rx + w // 3, ry + h - 2), 1)
 
-    # Small label so the player knows what it is
-    lbl = _font(13).render("Descend", True, (105, 185, 90))
+    # Small label — "Descend" when ready, otherwise "Pick a relic first"
+    if ready:
+        lbl_text = "Descend"
+        lbl_col = (105, 185, 90)
+    else:
+        lbl_text = "Choose a relic first"
+        lbl_col = (160, 140, 80)
+    lbl = _font(13).render(lbl_text, True, lbl_col)
     surf.blit(lbl, (sx - lbl.get_width() // 2, sy + 12))
 
 
@@ -859,3 +876,316 @@ def draw_pause_screen(surf: pygame.Surface) -> None:
         lbl = _font(24, bold=True).render(label, True, lc)
         surf.blit(lbl, (rect.centerx - lbl.get_width() // 2,
                         rect.centery - lbl.get_height() // 2))
+
+
+# ── Codex screen ──────────────────────────────────────────────────────────────
+
+# Tab configuration: (label, index)
+_CODEX_TABS = ["ENEMIES", "BOSSES", "RELICS", "PERKS"]
+
+# Enemy/boss entries: (class_name, constructor_kwargs, display_name, floor_badge, description)
+_CODEX_REGULAR: list[tuple] | None = None
+_CODEX_BOSSES: list[tuple] | None = None
+
+
+def _get_codex_enemies() -> tuple[list, list]:
+    """Lazily build the regular-enemy and boss entry lists (avoids import-time circles)."""
+    global _CODEX_REGULAR, _CODEX_BOSSES
+    if _CODEX_REGULAR is not None:
+        return _CODEX_REGULAR, _CODEX_BOSSES
+
+    from gamejam_may_2026 import enemies as E  # type: ignore
+
+    _CODEX_REGULAR = [
+        (E.GoblinRunner,  {},              "Goblin Runner",   "F1+",
+         "Relentless wall-aware chaser. Deals contact damage. Gains speed each floor."),
+        (E.GoblinArcher,  {},              "Goblin Archer",   "F1+",
+         "Keeps its distance and fires aimed arrows with a wind-up telegraph."),
+        (E.Wolf,          {},              "Wolf",            "F1+",
+         "Wobbling flanker that lunges at high speed when close. Deals contact damage."),
+        (E.SporePlant,    {},              "Spore Plant",     "F1+",
+         "Stationary. Alternates 4-way spore volleys at 0° and 45°."),
+        (E.StoneCrawler,  {},              "Stone Crawler",   "F4+",
+         "Armoured melee foe. First 3 hits deflected; deals 2 damage on contact."),
+        (E.VenomfangBat,  {},              "Venomfang Bat",   "F4+",
+         "Fast erratic flier with arc-wobble movement. Deals contact damage."),
+        (E.CrystalTurret, {},              "Crystal Turret",  "F5+",
+         "Stationary rotating turret. Immune front ±60°; takes ×2 from behind."),
+        (E.SporeElder,    {},              "Spore Elder",     "F5+ elite",
+         "Elite plant. Fires 8-way volleys and periodic 6-spore clouds."),
+        (E.ShadowWraith,  {},              "Shadow Wraith",   "F5+",
+         "Teleports every 4 s. Fires pairs of homing projectiles."),
+        (E.BoneArcher,    {},              "Bone Archer",     "F6+",
+         "3-way spread shots; every 4th shot is a slow heavy bone spike."),
+        (E.MagmaSlug,     {},              "Magma Slug",      "F6+",
+         "Slow armoured chaser. Leaves burn patches; deals 2 contact damage."),
+        (E.VoidShrieker,  {},              "Void Shrieker",   "F7",
+         "Fast erratic screamer. Explodes into an 8-way projectile ring on death."),
+    ]
+    _CODEX_BOSSES = [
+        (E.GoblinShaman,    {"floor": 1},  "Goblin Shaman",   "F1–2",
+         "Fires magic bolt bursts and summons Runners. P2: wider burst + pulsing aura."),
+        (E.AncientTree,     {},            "Ancient Tree",    "F3",
+         "Stationary. Alternating root bursts and fast thorn rings. Grows deadlier in P2."),
+        (E.IronWarden,      {},            "Iron Warden",     "F4",
+         "Armoured knight. Stomp AoE, shrapnel burst, P2 charge dash."),
+        (E.AbyssalLeech,    {},            "Abyssal Leech",   "F5",
+         "Fires healing tendrils and burst volleys. Moves and doubles tendrils in P2."),
+        (E.FungalMatriarch, {},            "Fungal Matriarch","F6",
+         "Spore volleys + SporeElder summons. Passive HP aura. Faster fire in P2."),
+        (E.VoidSovereign,   {},            "Void Sovereign",  "F7",
+         "Orbiting caster. Summons Wraiths. P2: 8-way burst, Shriekers, arena shrinks."),
+    ]
+    return _CODEX_REGULAR, _CODEX_BOSSES
+
+
+def _codex_enemy_sprite(
+    surf: pygame.Surface,
+    cx: int,
+    cy: int,
+    clip_r: int,
+    enemy_cls: type,
+    kwargs: dict,
+) -> None:
+    """Render a static enemy sprite centred at (cx, cy) clipped to a circle of radius clip_r."""
+    from gamejam_may_2026.camera import Camera  # type: ignore
+
+    # Create a throw-away enemy at world origin
+    try:
+        enemy = enemy_cls(0.0, 0.0, **kwargs)
+    except Exception:
+        return
+
+    # Trick: shift camera so world(0,0) maps to screen(cx, cy)
+    cam = Camera()
+    cam.offset.x = float(-cx)
+    cam.offset.y = float(-cy)
+    cam._sx = 0.0
+    cam._sy = 0.0
+
+    # Draw into surf with clip rect
+    clip_rect = pygame.Rect(cx - clip_r, cy - clip_r, clip_r * 2, clip_r * 2)
+    old_clip = surf.get_clip()
+    surf.set_clip(clip_rect)
+    try:
+        enemy.draw(surf, cam)
+    except Exception:
+        pass
+    surf.set_clip(old_clip)
+
+
+def draw_codex(surf: pygame.Surface, tab: int, scroll: int = 0) -> None:
+    """Full-screen Codex — enemies, bosses, relics and perks with sprites/icons."""
+    from gamejam_may_2026.perks import PERK_POOL    # type: ignore
+    from gamejam_may_2026.relics import RELIC_POOL  # type: ignore
+
+    surf.fill(C.C_BG)
+
+    # ── Decorative border ────────────────────────────────────────────────────
+    border_col = (35, 65, 25)
+    pygame.draw.line(surf, border_col, (0, 4),             (C.SCREEN_W, 4),             3)
+    pygame.draw.line(surf, border_col, (0, C.SCREEN_H - 5), (C.SCREEN_W, C.SCREEN_H - 5), 3)
+
+    # ── Header ───────────────────────────────────────────────────────────────
+    HEADER_H = 44
+    title = _font(30, bold=True).render("CODEX", True, (95, 195, 90))
+    surf.blit(title, (16, (HEADER_H - title.get_height()) // 2))
+    hint = _font(16).render("Esc  to exit   ·   < / > tabs   ·   ^ / v scroll", True, (55, 95, 50))
+    surf.blit(hint, (C.SCREEN_W - hint.get_width() - 16, (HEADER_H - hint.get_height()) // 2))
+
+    # ── Tab bar ──────────────────────────────────────────────────────────────
+    TAB_H = 38
+    TAB_Y = HEADER_H
+    tab_w = C.SCREEN_W // len(_CODEX_TABS)
+    for i, label in enumerate(_CODEX_TABS):
+        active = (i == tab)
+        rx = i * tab_w
+        bg = (45, 80, 35) if active else (20, 38, 15)
+        bd = (80, 165, 65) if active else (35, 68, 28)
+        pygame.draw.rect(surf, bg, (rx, TAB_Y, tab_w, TAB_H))
+        pygame.draw.rect(surf, bd, (rx, TAB_Y, tab_w, TAB_H), 2)
+        lbl = _font(18, bold=active).render(label, True,
+                                             (185, 235, 150) if active else (85, 130, 65))
+        surf.blit(lbl, (rx + tab_w // 2 - lbl.get_width() // 2,
+                        TAB_Y + TAB_H // 2 - lbl.get_height() // 2))
+
+    # ── Content area ─────────────────────────────────────────────────────────
+    CONTENT_Y = HEADER_H + TAB_H + 8
+    CONTENT_H = C.SCREEN_H - CONTENT_Y - 6
+    PAD = 12
+
+    if tab in (0, 1):
+        # ── Enemy / Boss grid ────────────────────────────────────────────────
+        regular, bosses = _get_codex_enemies()
+        entries = regular if tab == 0 else bosses
+
+        COLS = 4
+        CARD_W = (C.SCREEN_W - PAD * (COLS + 1)) // COLS
+        CARD_H = 165
+        SPRITE_R = 28        # clip radius for enemy preview
+
+        # Calculate total height for scrolling
+        rows = (len(entries) + COLS - 1) // COLS
+        total_h = rows * (CARD_H + PAD) + PAD
+        max_scroll = max(0, total_h - CONTENT_H)
+        scroll = max(0, min(scroll, max_scroll))
+
+        # Clip content to content area
+        old_clip = surf.get_clip()
+        surf.set_clip(pygame.Rect(0, CONTENT_Y, C.SCREEN_W, CONTENT_H))
+
+        for idx, (cls, kwargs, name, badge, desc) in enumerate(entries):
+            col = idx % COLS
+            row = idx // COLS
+            cx_card = PAD + col * (CARD_W + PAD)
+            cy_card = CONTENT_Y + PAD + row * (CARD_H + PAD) - scroll
+
+            if cy_card + CARD_H < CONTENT_Y or cy_card > CONTENT_Y + CONTENT_H:
+                continue  # off-screen
+
+            # Card background
+            card_rect = pygame.Rect(cx_card, cy_card, CARD_W, CARD_H)
+            pygame.draw.rect(surf, (18, 35, 14), card_rect, border_radius=6)
+            pygame.draw.rect(surf, (45, 80, 35), card_rect, 1, border_radius=6)
+
+            # Enemy sprite preview (top portion)
+            sprite_cx = cx_card + CARD_W // 2
+            sprite_cy = cy_card + SPRITE_R + 10
+            # Dark circle backdrop for sprite
+            pygame.draw.circle(surf, (10, 22, 8), (sprite_cx, sprite_cy), SPRITE_R + 4)
+            _codex_enemy_sprite(surf, sprite_cx, sprite_cy, SPRITE_R, cls, kwargs)
+
+            # Name
+            name_surf = _font(15, bold=True).render(name, True, (165, 220, 130))
+            surf.blit(name_surf, (cx_card + CARD_W // 2 - name_surf.get_width() // 2,
+                                  cy_card + SPRITE_R * 2 + 18))
+
+            # Floor badge
+            badge_surf = _font(12).render(badge, True, (200, 170, 70))
+            surf.blit(badge_surf, (cx_card + CARD_W // 2 - badge_surf.get_width() // 2,
+                                   cy_card + SPRITE_R * 2 + 36))
+
+            # Description (wrapped)
+            _draw_wrapped(surf, desc, _font(12),
+                          cx_card + 8, cy_card + SPRITE_R * 2 + 52,
+                          CARD_W - 16, (100, 145, 80))
+
+        surf.set_clip(old_clip)
+
+        # Scroll indicator
+        if max_scroll > 0:
+            frac = scroll / max_scroll
+            bar_h = max(24, int(CONTENT_H * CONTENT_H / total_h))
+            bar_y = CONTENT_Y + int(frac * (CONTENT_H - bar_h))
+            pygame.draw.rect(surf, (40, 70, 30),
+                             (C.SCREEN_W - 8, CONTENT_Y, 6, CONTENT_H), border_radius=3)
+            pygame.draw.rect(surf, (75, 145, 60),
+                             (C.SCREEN_W - 8, bar_y, 6, bar_h), border_radius=3)
+
+    elif tab == 2:
+        # ── Relics grid ──────────────────────────────────────────────────────
+        COLS = 4
+        CARD_W = (C.SCREEN_W - PAD * (COLS + 1)) // COLS
+        CARD_H = 110
+        ICON_SIZE = 28
+
+        rows = (len(RELIC_POOL) + COLS - 1) // COLS
+        total_h = rows * (CARD_H + PAD) + PAD
+        max_scroll = max(0, total_h - CONTENT_H)
+        scroll = max(0, min(scroll, max_scroll))
+
+        old_clip = surf.get_clip()
+        surf.set_clip(pygame.Rect(0, CONTENT_Y, C.SCREEN_W, CONTENT_H))
+
+        for idx, relic in enumerate(RELIC_POOL):
+            col = idx % COLS
+            row = idx // COLS
+            cx_card = PAD + col * (CARD_W + PAD)
+            cy_card = CONTENT_Y + PAD + row * (CARD_H + PAD) - scroll
+
+            if cy_card + CARD_H < CONTENT_Y or cy_card > CONTENT_Y + CONTENT_H:
+                continue
+
+            card_rect = pygame.Rect(cx_card, cy_card, CARD_W, CARD_H)
+            pygame.draw.rect(surf, (22, 18, 40), card_rect, border_radius=6)
+            pygame.draw.rect(surf, (75, 55, 130), card_rect, 1, border_radius=6)
+
+            # Icon
+            icon_cx = cx_card + CARD_W // 2
+            icon_cy = cy_card + ICON_SIZE // 2 + 10
+            icons.draw(surf, icon_cx, icon_cy, ICON_SIZE, relic.id, (195, 175, 255))
+
+            # Name
+            name_surf = _font(14, bold=True).render(relic.name, True, (210, 190, 255))
+            surf.blit(name_surf, (cx_card + CARD_W // 2 - name_surf.get_width() // 2,
+                                  icon_cy + ICON_SIZE // 2 + 6))
+
+            # Description
+            _draw_wrapped(surf, relic.desc, _font(12),
+                          cx_card + 8, icon_cy + ICON_SIZE // 2 + 24,
+                          CARD_W - 16, (135, 115, 195))
+
+        surf.set_clip(old_clip)
+
+        if max_scroll > 0:
+            frac = scroll / max_scroll
+            bar_h = max(24, int(CONTENT_H * CONTENT_H / total_h))
+            bar_y = CONTENT_Y + int(frac * (CONTENT_H - bar_h))
+            pygame.draw.rect(surf, (35, 28, 60),
+                             (C.SCREEN_W - 8, CONTENT_Y, 6, CONTENT_H), border_radius=3)
+            pygame.draw.rect(surf, (95, 70, 170),
+                             (C.SCREEN_W - 8, bar_y, 6, bar_h), border_radius=3)
+
+    elif tab == 3:
+        # ── Perks grid ───────────────────────────────────────────────────────
+        COLS = 4
+        CARD_W = (C.SCREEN_W - PAD * (COLS + 1)) // COLS
+        CARD_H = 100
+        ICON_SIZE = 26
+
+        rows = (len(PERK_POOL) + COLS - 1) // COLS
+        total_h = rows * (CARD_H + PAD) + PAD
+        max_scroll = max(0, total_h - CONTENT_H)
+        scroll = max(0, min(scroll, max_scroll))
+
+        old_clip = surf.get_clip()
+        surf.set_clip(pygame.Rect(0, CONTENT_Y, C.SCREEN_W, CONTENT_H))
+
+        for idx, perk in enumerate(PERK_POOL):
+            col = idx % COLS
+            row = idx // COLS
+            cx_card = PAD + col * (CARD_W + PAD)
+            cy_card = CONTENT_Y + PAD + row * (CARD_H + PAD) - scroll
+
+            if cy_card + CARD_H < CONTENT_Y or cy_card > CONTENT_Y + CONTENT_H:
+                continue
+
+            card_rect = pygame.Rect(cx_card, cy_card, CARD_W, CARD_H)
+            pygame.draw.rect(surf, (16, 32, 28), card_rect, border_radius=6)
+            pygame.draw.rect(surf, (48, 108, 88), card_rect, 1, border_radius=6)
+
+            # Icon
+            icon_cx = cx_card + CARD_W // 2
+            icon_cy = cy_card + ICON_SIZE // 2 + 10
+            icons.draw(surf, icon_cx, icon_cy, ICON_SIZE, perk.id, (140, 215, 185))
+
+            # Name
+            name_surf = _font(14, bold=True).render(perk.name, True, (165, 235, 210))
+            surf.blit(name_surf, (cx_card + CARD_W // 2 - name_surf.get_width() // 2,
+                                  icon_cy + ICON_SIZE // 2 + 6))
+
+            # Description
+            _draw_wrapped(surf, perk.desc, _font(12),
+                          cx_card + 8, icon_cy + ICON_SIZE // 2 + 24,
+                          CARD_W - 16, (100, 170, 145))
+
+        surf.set_clip(old_clip)
+
+        if max_scroll > 0:
+            frac = scroll / max_scroll
+            bar_h = max(24, int(CONTENT_H * CONTENT_H / total_h))
+            bar_y = CONTENT_Y + int(frac * (CONTENT_H - bar_h))
+            pygame.draw.rect(surf, (20, 38, 32),
+                             (C.SCREEN_W - 8, CONTENT_Y, 6, CONTENT_H), border_radius=3)
+            pygame.draw.rect(surf, (65, 148, 118),
+                             (C.SCREEN_W - 8, bar_y, 6, bar_h), border_radius=3)

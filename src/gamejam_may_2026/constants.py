@@ -79,7 +79,7 @@ GOBLIN_SPEED      = 88
 GOBLIN_HP         = 3
 GOBLIN_DAMAGE     = 1
 GOBLIN_RADIUS     = 13
-GOBLIN_COIN_DROP  = 2
+GOBLIN_COIN_DROP  = 2  # uniform drop
 
 # ── Goblin Archer ─────────────────────────────────────────────────────────────
 ARCHER_SPEED        = 60
@@ -88,7 +88,7 @@ ARCHER_DAMAGE       = 1
 ARCHER_RADIUS       = 12
 ARCHER_PREF_DIST    = 250   # preferred distance from player
 ARCHER_SHOOT_CD     = 2.2   # s between shots
-ARCHER_COIN_DROP    = 3
+ARCHER_COIN_DROP    = 2
 
 # ── Wolf ──────────────────────────────────────────────────────────────────────
 WOLF_SPEED        = 128
@@ -98,13 +98,13 @@ WOLF_LUNGE_SPEED  = 390    # px/s during lunge dash
 WOLF_LUNGE_DUR    = 0.18   # s
 WOLF_LUNGE_CD     = 2.2    # s between lunges
 WOLF_LUNGE_RANGE  = 130    # px; triggers lunge when closer than this
-WOLF_COIN_DROP    = 2
+WOLF_COIN_DROP    = 2  # uniform drop
 
 # ── Spore Plant ───────────────────────────────────────────────────────────────
 SPLANT_HP         = 5
 SPLANT_RADIUS     = 16
 SPLANT_SHOOT_CD   = 2.8    # s between volleys
-SPLANT_COIN_DROP  = 4
+SPLANT_COIN_DROP  = 2
 
 # ── Spore projectile (fired by Spore Plant) ───────────────────────────────────
 C_SPORE           = (75, 185, 55)    # bright green
@@ -146,7 +146,7 @@ CRAWLER_HP         = 8
 CRAWLER_RADIUS     = 16
 CRAWLER_SPEED      = 55.0
 CRAWLER_DAMAGE     = 2
-CRAWLER_COIN_DROP  = 4
+CRAWLER_COIN_DROP  = 2
 CRAWLER_SHELL_HITS = 3    # arrow deflects before shell breaks
 
 C_CRAWLER      = (138, 118, 92)
@@ -156,7 +156,7 @@ C_CRAWLER_DARK = ( 85,  72, 56)
 BAT_HP         = 2
 BAT_RADIUS     = 10
 BAT_SPEED      = 160.0
-BAT_COIN_DROP  = 3
+BAT_COIN_DROP  = 2
 
 C_BAT      = ( 95,  65, 135)
 C_BAT_DARK = ( 55,  38,  85)
@@ -166,7 +166,7 @@ TURRET_HP         = 10
 TURRET_RADIUS     = 18
 TURRET_SHOOT_CD   = 2.5
 TURRET_PROJ_SPEED = 220.0
-TURRET_COIN_DROP  = 5
+TURRET_COIN_DROP  = 2
 
 C_TURRET      = ( 95, 180, 215)
 C_TURRET_DARK = ( 60, 115, 145)
@@ -177,7 +177,7 @@ WRAITH_HP            = 4
 WRAITH_RADIUS        = 13
 WRAITH_TELEPORT_CD   = 4.0    # s between teleports
 WRAITH_SHOOT_CD      = 2.0    # s between homing-shot pairs
-WRAITH_COIN_DROP     = 5
+WRAITH_COIN_DROP     = 2
 WRAITH_TELEPORT_DIST = 300.0  # minimum distance from player when blinking
 
 C_WRAITH      = ( 75,  40, 120)
@@ -189,7 +189,7 @@ BONE_ARCHER_HP        = 4
 BONE_ARCHER_RADIUS    = 12
 BONE_ARCHER_SPEED     = 55.0
 BONE_ARCHER_SHOOT_CD  = 1.4
-BONE_ARCHER_COIN_DROP = 4
+BONE_ARCHER_COIN_DROP = 2
 
 C_BONE       = (215, 200, 175)
 C_BONE_DARK  = (155, 138, 112)
@@ -200,7 +200,7 @@ SLUG_HP         = 14
 SLUG_RADIUS     = 16
 SLUG_SPEED      = 45.0
 SLUG_DAMAGE     = 2
-SLUG_COIN_DROP  = 6
+SLUG_COIN_DROP  = 2
 SLUG_DROP_CD    = 0.5   # s between burn-patch drops
 
 C_SLUG       = (195,  80,  25)
@@ -211,7 +211,7 @@ C_BURN_PATCH = (210, 100,  20)
 SHRIEKER_HP         = 3
 SHRIEKER_RADIUS     = 11
 SHRIEKER_SPEED      = 140.0
-SHRIEKER_COIN_DROP  = 6
+SHRIEKER_COIN_DROP  = 2
 
 C_SHRIEKER      = ( 80,  20, 160)
 C_SHRIEKER_DARK = ( 45,  10,  90)
@@ -266,3 +266,10 @@ SOVEREIGN_VOID_MAX  = 128.0  # px maximum void margin
 C_SOVEREIGN      = ( 18,   4,  45)
 C_SOVEREIGN_DARK = (  8,   2,  22)
 C_SOVEREIGN_SHOT = (130,  55, 255)
+
+# ── Shop prices (indexed by floor-1, F1–F7) ──────────────────────────────────
+# Scaled so both items together ≈ 50–85 % of expected floor income.
+# Expected income per floor (combat rooms × coins/room + boss, depth-3 avg):
+#   F1≈38  F2≈68  F3≈115  F4≈185  F5≈350  F6≈490  F7≈770
+SHOP_HP_PRICE   = [10,  20,  35,  50,  75, 105, 155]  # Heart Vial
+SHOP_PERK_PRICE = [30,  45,  80, 115, 180, 240, 360]  # Perk card

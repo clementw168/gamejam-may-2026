@@ -213,6 +213,64 @@ Pick 1 of 2 offered after each floor boss (`RELIC` state between `FLOOR_CLEAR` a
 | 7 | rubble_heap | Asymmetric scatter of wall blocks (F4+) |
 | 8 | pillars_dense | 12 single-tile sight-breaking pillars (F5+) |
 
+## Coin economy
+
+### Enemy coin drops
+
+All regular enemies drop a **flat 2 coins** to reduce room-to-room variance and simplify balancing. Bosses keep themed values.
+
+| Type | Drop |
+|---|---|
+| All regular enemies | **2** |
+| Goblin Shaman | 10 |
+| Ancient Tree | 15 |
+| Iron Warden | 18 |
+| Abyssal Leech | 20 |
+| Fungal Matriarch | 22 |
+| Void Sovereign | 30 |
+
+### Expected income per floor
+
+Computed from: `randint(max(5, F+4), min(14, F+6))` total rooms → subtract 3 (start + shop + boss) combat rooms; assume depth-3 wave for all but first 2 rooms.
+
+| Floor | Rooms (avg) | Combat rooms | Enemies/room | Coins/room | ~Floor income |
+|---|---|---|---|---|---|
+| 1 | 6 | 3 | 5 | 10 | 40 |
+| 2 | 7 | 4 | 7 | 14 | 66 |
+| 3 | 8 | 5 | 10 | 20 | 115 |
+| 4 | 9 | 6 | 12 | 24 | 162 |
+| 5 | 10 | 7 | 17 | 34 | 258 |
+| 6 | 11 | 8 | 20 | 40 | 342 |
+| 7 | 12 | 9 | 27 | 54 | 516 |
+
+### Shop prices (per floor, `constants.py` `SHOP_HP_PRICE` / `SHOP_PERK_PRICE`)
+
+Shop has **1 HP Vial** (reusable while HP < max) + **1 Perk card** — 2 slots, forcing a trade-off. Both items together target ≈ 50–85 % of expected floor income.
+
+Prices set so HP + Perk ≈ expected floor income (30/70 split). Clearing all combat rooms lets you afford exactly one of each.
+
+| Floor | Income | HP Vial | Perk | Total |
+|---|---|---|---|---|
+| 1 | 40 | 10 | 30 | 40 |
+| 2 | 66 | 20 | 45 | 65 |
+| 3 | 115 | 35 | 80 | 115 |
+| 4 | 162 | 50 | 115 | 165 |
+| 5 | 258 | 75 | 180 | 255 |
+| 6 | 342 | 105 | 240 | 345 |
+| 7 | 516 | 155 | 360 | 515 |
+
+### Relic healing per floor (post-nerf)
+
+| Floor | Coin-Fed Heart (100c/HP) | Leech Stone (50 kills/HP) |
+|---|---|---|
+| 1 | 0.4 HP | 0.3 HP |
+| 2 | 0.7 HP | 0.6 HP |
+| 3 | 1.2 HP | 1.0 HP |
+| 4 | 1.6 HP | 1.5 HP |
+| 5 | 2.6 HP | 2.4 HP |
+| 6 | 3.4 HP | 3.2 HP |
+| 7 | 5.2 HP | 4.9 HP |
+
 ## Known issues (all fixed)
 
 | # | Issue | Fix |

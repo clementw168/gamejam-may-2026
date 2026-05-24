@@ -219,9 +219,23 @@ class GoblinRunner(Enemy):
     def draw(self, surf: pygame.Surface, camera: Camera) -> None:
         sx, sy = self._draw_body(surf, camera, C.C_GOBLIN, C.C_GOBLIN_DARK)
         if self._flash <= 0:
+            r = self.radius
+            # Pointy goblin ears
+            for ex in (-7, 7):
+                ear = [
+                    (sx + ex, sy - r - 6),
+                    (sx + ex - 3, sy - r + 3),
+                    (sx + ex + 3, sy - r + 3),
+                ]
+                pygame.draw.polygon(surf, C.C_GOBLIN, ear)
+                pygame.draw.polygon(surf, C.C_GOBLIN_DARK, ear, 1)
+            # Eyes
             for ex in (-5, 5):
                 pygame.draw.circle(surf, (10, 10, 10), (sx + ex, sy - 4), 3)
                 pygame.draw.circle(surf, (255, 240, 50), (sx + ex, sy - 4), 1)
+            # Angry brows (angled inward toward nose)
+            pygame.draw.line(surf, (20, 20, 10), (sx - 8, sy - 9), (sx - 2, sy - 7), 2)
+            pygame.draw.line(surf, (20, 20, 10), (sx + 2, sy - 7), (sx + 8, sy - 9), 2)
 
 
 # ── Goblin Archer ──────────────────────────────────────────────────────────────
@@ -287,6 +301,19 @@ class GoblinArcher(Enemy):
             pygame.draw.circle(surf, (pulse, pulse // 3, 0), (round(sx), round(sy)), self.radius + 8, 2)
         sx, sy = self._draw_body(surf, camera, (180, 140, 75), (120, 95, 50))
         if self._flash <= 0:
+            r = self.radius
+            # Bow on the left side (arc + string)
+            bow_cx = sx - r - 4
+            bow_rect = pygame.Rect(bow_cx - 6, sy - 11, 12, 22)
+            pygame.draw.arc(surf, (115, 78, 35), bow_rect, -math.pi / 2, math.pi / 2, 2)
+            pygame.draw.line(surf, (195, 170, 120), (bow_cx, sy - 11), (bow_cx, sy + 11), 1)
+            # Arrow nocked across body
+            pygame.draw.line(surf, (160, 130, 85), (bow_cx + 1, sy), (sx + r + 4, sy), 1)
+            # Arrowhead tip
+            tip_x = sx + r + 4
+            pygame.draw.polygon(surf, (185, 155, 90), [
+                (tip_x + 4, sy), (tip_x, sy - 2), (tip_x, sy + 2)])
+            # Eyes
             pygame.draw.circle(surf, (10, 10, 10), (sx - 4, sy - 3), 2)
             pygame.draw.circle(surf, (10, 10, 10), (sx + 4, sy - 3), 2)
 
@@ -1272,6 +1299,15 @@ class ShadowWraith(Enemy):
             for ex in (-4, 4):
                 pygame.draw.circle(surf, (160, 60, 255), (sx + ex, sy - 3), 3)
                 pygame.draw.circle(surf, (225, 185, 255), (sx + ex, sy - 3), 1)
+            # Ghost wisps dangling below the body
+            for i, ox in enumerate((-5, 0, 5)):
+                for j in range(1, 5):
+                    wy = sy + r - 2 + j * 3
+                    wx = sx + ox + round(math.sin(self._pulse_t * 1.4 + i * 1.3 + j * 0.6) * 2)
+                    wisp_size = max(1, 3 - j)
+                    wisp_alpha = int(100 - j * 20)
+                    wisp_col = (max(0, 55 - j * 10), max(0, 25 - j * 5), max(0, 95 - j * 18))
+                    pygame.draw.circle(surf, wisp_col, (wx, wy), wisp_size)
 
         # HP bar
         if self.hp < self.max_hp:
@@ -1394,6 +1430,12 @@ class BoneArcher(Enemy):
             for ex in (-4, 4):
                 pygame.draw.circle(surf, (10, 10, 10), (sx + ex, sy - 3), 3)
                 pygame.draw.circle(surf, (200, 185, 155), (sx + ex, sy - 3), 1)
+            # Cheekbone cracks
+            pygame.draw.line(surf, C.C_BONE_DARK, (sx - 8, sy + 1), (sx - 4, sy + 5), 1)
+            pygame.draw.line(surf, C.C_BONE_DARK, (sx + 4, sy + 5), (sx + 8, sy + 1), 1)
+            # Teeth (small bars across the lower face)
+            for tx in (-4, -1, 2, 5):
+                pygame.draw.rect(surf, (228, 215, 195), (sx + tx, sy + 4, 2, 4))
 
 
 # ── Magma Slug (floor 6+) ─────────────────────────────────────────────────────
@@ -1456,6 +1498,18 @@ class MagmaSlug(Enemy):
         gr = r + 4 + round(pulse * 4)
         gc = (min(255, 185 + round(pulse * 40)), min(255, 65 + round(pulse * 35)), 12)
         pygame.draw.circle(surf, gc, (sx, sy), gr, 3)
+
+        # Antennae (drawn before body so body overlaps base)
+        if self._flash <= 0:
+            ant_tip_col = (min(255, 240 + round(pulse * 15)), min(255, 100 + round(pulse * 55)), 10)
+            for ax, tilt in ((-5, -3), (5, 3)):
+                # Stalk
+                pygame.draw.line(surf, C.C_SLUG_DARK,
+                                 (sx + ax, sy - r + 3),
+                                 (sx + ax + tilt, sy - r - 7), 2)
+                # Glowing tip ball
+                pygame.draw.circle(surf, ant_tip_col, (sx + ax + tilt, sy - r - 7), 3)
+                pygame.draw.circle(surf, C.C_SLUG_DARK, (sx + ax + tilt, sy - r - 7), 3, 1)
 
         # Shadow + body
         pygame.draw.circle(surf, (8, 8, 8), (sx + 3, sy + 5), r - 2)
@@ -1577,8 +1631,15 @@ class VoidShrieker(Enemy):
         pygame.draw.circle(surf, color, (sx, sy), r)
         if self._flash <= 0:
             pygame.draw.circle(surf, C.C_SHRIEKER_DARK, (sx, sy + r // 3), r // 2)
-            # Screaming mouth
-            pygame.draw.ellipse(surf, (10, 5, 20), (sx - 4, sy, 8, 5))
+            # Void eyes (bright pulsing purple)
+            eye_glow = int(140 + abs(math.sin(self._t * 4.0)) * 80)
+            for ex in (-4, 4):
+                pygame.draw.circle(surf, (eye_glow, 30, 230), (sx + ex, sy - 4), 3)
+                pygame.draw.circle(surf, (230, 200, 255), (sx + ex, sy - 4), 1)
+            # Large screaming void mouth
+            pygame.draw.ellipse(surf, (8, 0, 18), (sx - 5, sy + 1, 10, 7))
+            # Inner void depth
+            pygame.draw.ellipse(surf, (0, 0, 5), (sx - 3, sy + 2, 6, 5))
 
         # HP bar
         if self.hp < self.max_hp:
@@ -1605,7 +1666,7 @@ class SporeElder(SporePlant):
         # Override HP and coin drop
         self.hp = 18 + max(0, floor - 5) * 3
         self.max_hp = self.hp
-        self.coin_drop = 7
+        self.coin_drop = 2
         self._cloud_cd: float = random.uniform(4.0, 7.0)
 
     def update(
@@ -1661,6 +1722,63 @@ class SporeElder(SporePlant):
                 self._shoot_cd = C.SPLANT_SHOOT_CD
                 self._winding = False
                 self._wind_up = 0.0
+
+    def draw(self, surf: pygame.Surface, camera: Camera) -> None:
+        """Distinguished from SporePlant: larger outer ring, crown thorns, brighter palette."""
+        sx, sy = camera.apply_pos(self.x, self.y)
+        sx, sy = round(sx), round(sy)
+
+        # Slower, brighter pulse
+        pulse = (math.sin(self._pulse_t * 0.9) + 1.0) * 0.5
+
+        # Outer aura ring (extra wide)
+        aura_r = self.radius + 8 + round(pulse * 7)
+        aura_g = int(130 + pulse * 100)
+        pygame.draw.circle(surf, (30, aura_g, 30), (sx, sy), aura_r, 2)
+
+        # Secondary inner ring
+        inner_ring_r = self.radius + 3 + round(pulse * 3)
+        pygame.draw.circle(surf, (60, 200, 55), (sx, sy), inner_ring_r, 1)
+
+        # Wind-up glow
+        if self._winding:
+            frac = self._wind_up / self._WIND_DUR
+            glow_r = self.radius + round(frac * 16)
+            glow_c = (min(255, 40 + round(frac * 80)), min(255, 200 + round(frac * 55)), 50)
+            pygame.draw.circle(surf, glow_c, (sx, sy), glow_r, 3)
+
+        # 8 crown-like spines (alternating long/short)
+        for i in range(self._NUM_SPOKES):
+            angle = math.radians(self._rotation + i * (360 / self._NUM_SPOKES))
+            length = self.radius + (13 if i % 2 == 0 else 8)
+            ex = sx + round(math.cos(angle) * length)
+            ey = sy + round(math.sin(angle) * length)
+            col = (55, 185, 48) if i % 2 == 0 else (38, 145, 32)
+            pygame.draw.line(surf, col, (sx, sy), (ex, ey), 2)
+            # Thorn tip for long spines
+            if i % 2 == 0:
+                pygame.draw.circle(surf, (80, 215, 60), (ex, ey), 2)
+
+        # Shadow + body (brighter green than regular SporePlant)
+        pygame.draw.circle(surf, (8, 8, 8), (sx + 2, sy + 4), self.radius - 2)
+        body_col = (255, 255, 255) if self._flash > 0 else (65, 155, 48)
+        pygame.draw.circle(surf, body_col, (sx, sy), self.radius)
+        if self._flash <= 0:
+            pygame.draw.circle(surf, (40, 105, 30), (sx, sy + self.radius // 3), self.radius // 2)
+
+        # Glowing centre pip (brighter than SporePlant)
+        pip_col = (min(255, 80 + round(pulse * 80)), min(255, 200 + round(pulse * 55)), 40)
+        pygame.draw.circle(surf, pip_col, (sx, sy), 5)
+        pygame.draw.circle(surf, (35, 80, 25), (sx, sy), 5, 1)
+
+        # HP bar (green tint)
+        if self.hp < self.max_hp:
+            bw = self.radius * 2
+            bx, by = sx - self.radius, sy - self.radius - 10
+            pygame.draw.rect(surf, (20, 0, 0), (bx, by, bw, 4))
+            fill = round(bw * self.hp / self.max_hp)
+            pygame.draw.rect(surf, (80, 220, 60), (bx, by, fill, 4))
+        self._draw_status_rings(surf, sx, sy)
 
 
 # ── Iron Warden (floor 4 boss) ────────────────────────────────────────────────

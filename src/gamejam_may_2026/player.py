@@ -73,11 +73,11 @@ class Player:
         self.iron_lungs:         bool  = False  # dash-through contact damage
         self.bone_buckler:       bool  = False  # Bone Buckler relic (reset charge per room)
         self.block_charge:       int   = 0      # Bone Buckler — absorb next hit
-        self.coin_fed_heart:     bool  = False  # +1 HP per 10 coins
+        self.coin_fed_heart:     bool  = False  # +1 HP per 100 coins
         self._coin_fed_acc:      int   = 0      # coin accumulator for Coin-Fed Heart
         self.shrapnel_tips:      bool  = False  # wall-impact shrapnel fan
         self.phase_cloak:        bool  = False  # dash stuns enemies
-        self.leech_stone:        bool  = False  # +HP on 5 kills
+        self.leech_stone:        bool  = False  # +HP on 50 kills
         self._leech_kills:       int   = 0      # kill counter
         self.overcharged_quiver: bool  = False  # every 4th arrow ×3 dmg
         self._overcharged_count: int   = 0      # arrow counter
@@ -90,6 +90,7 @@ class Player:
         self._bloodlust_t:       float = 0.0    # seconds remaining
         self.curse_of_greed:     bool  = False  # 2× coins, zero per floor
         self.petrified_heart:    bool  = False  # 50% dmg reduction, no overheal
+        self._petrified_acc:     float = 0.0   # accumulates 0.5× damage; triggers when ≥1
         self.hunter_mark:        bool  = False  # first hit per room ×3
         self._hunter_mark_used:  bool  = False  # cleared per room
         self.void_core:          bool  = False  # 8-way pulse every 10 s
@@ -241,9 +242,18 @@ class Player:
             self._iframes = self.iframes_dur
             self._flash = 0.12
             return True   # hit registered (for spiked_shell etc.) but no HP lost
-        # Petrified Heart: 50 % damage reduction (ceiling-halve, min 1 for 1-dmg hits)
+        # Petrified Heart: 50 % damage reduction via accumulator.
+        # Each hit contributes amount×0.5 to the acc; only integer overflow is applied.
+        # e.g. two 1-dmg hits → 0.5+0.5=1 → take 1 HP total instead of 2.
         if self.petrified_heart:
-            amount = (amount + 1) // 2
+            self._petrified_acc += amount * 0.5
+            amount = int(self._petrified_acc)
+            self._petrified_acc -= amount
+            if amount == 0:
+                # Damage absorbed into accumulator — still trigger iframes/flash
+                self._iframes = self.iframes_dur
+                self._flash = 0.12
+                return True
         self.hp -= amount
         self._iframes = self.iframes_dur
         self._flash = 0.12
