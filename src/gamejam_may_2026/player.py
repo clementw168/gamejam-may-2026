@@ -1,18 +1,20 @@
 """Player — movement, dash, shooting, health."""
 
 from __future__ import annotations
+
 import math
+from typing import TYPE_CHECKING
+
 import pygame
+
+from gamejam_may_2026 import config, sounds
 from gamejam_may_2026 import constants as C
-from gamejam_may_2026 import config
-from gamejam_may_2026 import sounds
 from gamejam_may_2026.projectiles import Arrow
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from gamejam_may_2026.rooms import Room
-    from gamejam_may_2026.particles import ParticleSystem
     from gamejam_may_2026.camera import Camera
+    from gamejam_may_2026.particles import ParticleSystem
+    from gamejam_may_2026.rooms import Room
 
 
 class Player:
@@ -205,7 +207,7 @@ class Player:
             a.update(dt, room)
             if not a.alive:
                 particles.emit_hit(a.x, a.y, math.degrees(a.angle))
-                if getattr(a, '_wall_hit', False):
+                if getattr(a, '_wall_hit', False) and not getattr(a, '_is_shrapnel', False):
                     self._wall_hit_arrows.append((a.x, a.y, a.angle))
         self.arrows = [a for a in self.arrows if a.alive]
 

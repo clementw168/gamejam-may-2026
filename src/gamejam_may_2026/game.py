@@ -772,11 +772,13 @@ class Game:
                 self._blur_clones.append({"x": prev_px, "y": prev_py, "charges": 1})
 
         # Shrapnel Tips — spawn 3 mini-shrapnel per wall-hit arrow
+        # _is_shrapnel flag prevents recursive chain: shrapnel hitting walls never spawn more shrapnel
         if self.player.shrapnel_tips:
             for wx, wy, wang in self.player._wall_hit_arrows:
                 refl_base = math.atan2(-math.sin(wang), -math.cos(wang))
                 for dang in (-0.52, 0.0, 0.52):  # ≈ ±30°
                     shr = Arrow(wx, wy, refl_base + dang, speed=450, damage=1, lifetime=0.30)
+                    shr._is_shrapnel = True
                     self.player.arrows.append(shr)
 
         # Phase Cloak / Iron Lungs — dash-through effects
