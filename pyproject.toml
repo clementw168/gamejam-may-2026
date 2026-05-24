@@ -3,11 +3,15 @@ name = "gamejam-may-2026"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    "pygame-ce>=2.5.0",
 ]
 authors = [
     { name = "Clement Wang", email = "clementwang.pro@gmail.com" },
 ]
 readme = "README.md"
+
+[project.scripts]
+verdant-depths = "gamejam_may_2026.main:main"
 
 [dependency-groups]
 dev = [
