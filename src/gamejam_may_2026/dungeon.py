@@ -10,10 +10,11 @@ The room furthest (BFS distance) from the start is marked as_boss.
 """
 
 from __future__ import annotations
+
 import random
 from collections import deque
 
-from gamejam_may_2026.rooms import Room
+from gamejam_may_2026.rooms import TEMPLATES, Room
 
 # ── Direction helpers ─────────────────────────────────────────────────────────
 DIRS: dict[str, tuple[int, int]] = {
@@ -91,7 +92,10 @@ class Dungeon:
             stack.append(npos)
 
         # ── Phase 2: build Room objects with correct door openings ─────────────
-        templates = list(range(5))
+        # Deeper floors unlock later (underground-ruin) templates.
+        # Floor 1 → templates 0–4; each additional floor unlocks 1 more, up to all 9.
+        n_tmpl = min(len(TEMPLATES), 5 + min(4, self.floor - 1))
+        templates = list(range(n_tmpl))
         random.shuffle(templates)
         for i, (pos, doors) in enumerate(pos_doors.items()):
             tmpl = templates[i % len(templates)]

@@ -157,7 +157,6 @@ BAT_HP         = 2
 BAT_RADIUS     = 10
 BAT_SPEED      = 160.0
 BAT_COIN_DROP  = 3
-BAT_POISON_DUR = 3.0     # seconds of poison applied to player on contact
 
 C_BAT      = ( 95,  65, 135)
 C_BAT_DARK = ( 55,  38,  85)
@@ -172,3 +171,98 @@ TURRET_COIN_DROP  = 5
 C_TURRET      = ( 95, 180, 215)
 C_TURRET_DARK = ( 60, 115, 145)
 C_TURRET_BEAM = (175, 230, 255)
+
+# ── Shadow Wraith (floor 5+) ──────────────────────────────────────────────────
+WRAITH_HP            = 4
+WRAITH_RADIUS        = 13
+WRAITH_TELEPORT_CD   = 4.0    # s between teleports
+WRAITH_SHOOT_CD      = 2.0    # s between homing-shot pairs
+WRAITH_COIN_DROP     = 5
+WRAITH_TELEPORT_DIST = 300.0  # minimum distance from player when blinking
+
+C_WRAITH      = ( 75,  40, 120)
+C_WRAITH_DARK = ( 40,  20,  70)
+C_WRAITH_SHOT = (120,  60, 220)
+
+# ── Bone Archer (floor 6+) ────────────────────────────────────────────────────
+BONE_ARCHER_HP        = 4
+BONE_ARCHER_RADIUS    = 12
+BONE_ARCHER_SPEED     = 55.0
+BONE_ARCHER_SHOOT_CD  = 1.4
+BONE_ARCHER_COIN_DROP = 4
+
+C_BONE       = (215, 200, 175)
+C_BONE_DARK  = (155, 138, 112)
+C_BONE_SPIKE = (240, 228, 205)   # slightly brighter for the heavy spike
+
+# ── Magma Slug (floor 6+) ────────────────────────────────────────────────────
+SLUG_HP         = 14
+SLUG_RADIUS     = 16
+SLUG_SPEED      = 45.0
+SLUG_DAMAGE     = 2
+SLUG_COIN_DROP  = 6
+SLUG_DROP_CD    = 0.5   # s between burn-patch drops
+
+C_SLUG       = (195,  80,  25)
+C_SLUG_DARK  = (130,  50,  12)
+C_BURN_PATCH = (210, 100,  20)
+
+# ── Void Shrieker (floor 7) ───────────────────────────────────────────────────
+SHRIEKER_HP         = 3
+SHRIEKER_RADIUS     = 11
+SHRIEKER_SPEED      = 140.0
+SHRIEKER_COIN_DROP  = 6
+
+C_SHRIEKER      = ( 80,  20, 160)
+C_SHRIEKER_DARK = ( 45,  10,  90)
+C_VOID_SHOT     = (130,  30, 240)
+
+# ── Iron Warden (floor 4 boss) ────────────────────────────────────────────────
+WARDEN_HP           = 40
+WARDEN_RADIUS       = 28
+WARDEN_SPEED        = 60.0
+WARDEN_COIN_DROP    = 18
+WARDEN_STOMP_CD     = 4.0
+WARDEN_SHRAPNEL_CD  = 5.0
+WARDEN_CHARGE_CD    = 6.0   # P2 only
+
+C_WARDEN       = (130, 110,  80)
+C_WARDEN_DARK  = ( 75,  62,  42)
+C_WARDEN_SPARK = (220, 185,  80)
+
+# ── Abyssal Leech (floor 5 boss) ─────────────────────────────────────────────
+LEECH_HP          = 35
+LEECH_RADIUS      = 26
+LEECH_COIN_DROP   = 20
+LEECH_TENDRIL_CD  = 6.0
+LEECH_BURST_CD    = 5.0
+LEECH_SPEED_P2    = 30.0
+
+C_LEECH      = ( 28,  75, 100)
+C_LEECH_DARK = ( 14,  42,  60)
+C_LEECH_SHOT = ( 40, 185, 210)
+
+# ── Fungal Matriarch (floor 6 boss) ──────────────────────────────────────────
+MATRIARCH_HP         = 50
+MATRIARCH_RADIUS     = 30
+MATRIARCH_COIN_DROP  = 22
+MATRIARCH_SPORE_CD   = 3.0
+MATRIARCH_SUMMON_CD  = 12.0
+
+C_MATRIARCH       = ( 80, 145,  45)
+C_MATRIARCH_DARK  = ( 45,  88,  22)
+C_MATRIARCH_SPORE = (155, 210,  85)
+
+# ── Void Sovereign (floor 7 boss) ────────────────────────────────────────────
+SOVEREIGN_HP        = 70
+SOVEREIGN_RADIUS    = 25
+SOVEREIGN_SPEED     = 65.0
+SOVEREIGN_COIN_DROP = 30
+SOVEREIGN_BURST_CD  = 1.8
+SOVEREIGN_SUMMON_CD = 8.0
+SOVEREIGN_VOID_GROW = 0.5    # px/s void margin expands per second in P2
+SOVEREIGN_VOID_MAX  = 128.0  # px maximum void margin
+
+C_SOVEREIGN      = ( 18,   4,  45)
+C_SOVEREIGN_DARK = (  8,   2,  22)
+C_SOVEREIGN_SHOT = (130,  55, 255)
