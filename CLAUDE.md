@@ -16,7 +16,7 @@ uv run verdant-depths [--keys arrows|wasd|zqsd]
 | `config.py` | Runtime config — key layout (`--keys` flag) |
 | `sounds.py` | Procedural audio synthesis + asset file override |
 | `main.py` | pygame init, mixer pre-init, `sounds.init()`, game loop |
-| `game.py` | State machine: **MENU** / PLAYING ↔ TRANSITIONING / UPGRADE / SHOP / FLOOR_CLEAR / RELIC / VICTORY / DEAD; dungeon nav, gate blocking, coin drops, floor progression, boss spawn, summon drain, pack wave roll, run-stats tracking, high-score I/O |
+| `game.py` | State machine: **MENU** / PLAYING ↔ TRANSITIONING / UPGRADE / SHOP / FLOOR_CLEAR / RELIC / VICTORY / DEAD / **ARENA_SELECT** / **ARENA** / ARENA_WIN / ARENA_DEAD; dungeon nav, gate blocking, coin drops, floor progression, boss spawn, summon drain, pack wave roll, run-stats tracking, high-score I/O |
 | `camera.py` | World↔screen transform + screen shake |
 | `rooms.py` | Tile grid, 9 templates (5 base + 4 underground-ruin), collision, `find_spawn_near_centre`, door tile cuts, `get_spawn_positions` with `exclude_pos` |
 | `dungeon.py` | DFS room graph, BFS boss detection, floor-weighted template selection |
@@ -125,7 +125,20 @@ Override any track: drop `<name>.ogg` (or `.wav`) in `src/gamejam_may_2026/asset
 | Left Click | Shoot arrow |
 | Space | Dash (i-frames; cooldown arc shows recharge) |
 | R | Return to menu after death / victory |
+| C | View Codex (from main menu) |
+| A | Arena Mode (from main menu) |
 | Esc | Quit |
+
+### Arena Mode controls (ARENA_SELECT screen)
+
+| Key | Action |
+|---|---|
+| Arrow keys | Navigate enemy grid |
+| `-` / `=` | Decrease / increase enemy count |
+| Mouse scroll | Decrease / increase enemy count |
+| Click (selected) | Double-click selected card to start fight |
+| Enter / Space | Start fight |
+| Esc | Back to menu |
 
 ## Perks (12 total — `perks.py`)
 
@@ -278,6 +291,30 @@ Prices set so HP + Perk ≈ expected floor income (30/70 split). Clearing all co
 | 1 | ~~Flag-based perks offered again after applied~~ | `_available_perks(player)` filters `piercing_shot`/`double_shot` before sampling |
 | 2 | ~~Minimap cells too small (14×7 px)~~ | `CW, CH` bumped to 20×11 in `ui.draw_minimap` |
 | 3 | ~~GoblinShaman double HP bar~~ | Removed redundant bars; `ui.draw_boss_hpbar()` is sole source of truth |
+
+## Arena Mode
+
+Accessible from the main menu with `A`. A standalone 1v1 (or 1vN) practice mode — no items, no relics, no floor progression.
+
+### States
+- `ARENA_SELECT` — enemy selection screen (6×3 grid of all 18 enemies)
+- `ARENA` — sealed room fight (all doors locked, no upgrades/coins)
+- `ARENA_WIN` — all enemies defeated overlay
+- `ARENA_DEAD` — player died overlay
+
+### Selection screen (`game.py: _ARENA_ENTRIES`, `ui.py: draw_arena_select`)
+- 12 regular enemies + 6 bosses
+- Count 1–`max_count` (regular max 4–10; boss max 2–3)
+- Arrow keys to navigate; `-`/`=` or mouse scroll to change count; Enter/Space to start
+
+### Arena fight (`game.py: _update_arena`)
+- Fresh `Player` (3 HP, no relics, no perks) each fight
+- Uses a `Dungeon(floor=1)` start room; all doors permanently locked
+- Boss HP bar shown for boss enemies; HUD shows `⚔ EnemyName ×N` label
+- Boss summons (Shaman, Matriarch, Sovereign) work normally
+- Burn patches, spore auras, void field all active
+- `ARENA_WIN` when enemies list empties; `ARENA_DEAD` when player HP = 0
+- Press `R` to return to main menu from either result screen
 
 ## Design ideas (not implemented)
 

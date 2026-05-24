@@ -1,12 +1,14 @@
 """Entry point — initialise pygame and run the game loop."""
 
 from __future__ import annotations
+
 import argparse
 import sys
+
 import pygame
+
+from gamejam_may_2026 import config, sounds
 from gamejam_may_2026 import constants as C
-from gamejam_may_2026 import config
-from gamejam_may_2026 import sounds
 from gamejam_may_2026.game import Game
 
 
@@ -28,7 +30,7 @@ def _parse_args() -> None:
     )
     args = parser.parse_args()
     config.KEY_LAYOUT = args.keys
-    config.DEBUG      = args.debug
+    config.DEBUG = args.debug
 
 
 def main() -> None:
@@ -37,7 +39,7 @@ def main() -> None:
     pygame.mixer.pre_init(44100, -16, 2, 512)  # 44 kHz, 16-bit signed, stereo
     pygame.init()
     pygame.mixer.init()
-    sounds.init()   # generate / load all sounds
+    sounds.init()  # generate / load all sounds
     pygame.display.set_caption("Verdant Depths")
     screen = pygame.display.set_mode((C.SCREEN_W, C.SCREEN_H))
     pygame.mouse.set_visible(True)

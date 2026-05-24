@@ -8,7 +8,7 @@ perks scale from wherever the player currently stands (stackable).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from gamejam_may_2026.player import Player
@@ -16,14 +16,15 @@ if TYPE_CHECKING:
 
 @dataclass
 class Perk:
-    id:    str
-    name:  str
-    desc:  str
-    icon:  str                      # single emoji / symbol shown on card
+    id: str
+    name: str
+    desc: str
+    icon: str  # single emoji / symbol shown on card
     apply: Callable[[Player], None]
 
 
 # ── Individual perk functions ─────────────────────────────────────────────────
+
 
 def _vital_surge(p: Player) -> None:
     """Add a max heart and heal 1."""
@@ -89,16 +90,16 @@ def _berserker(p: Player) -> None:
 # ── Pool ──────────────────────────────────────────────────────────────────────
 
 PERK_POOL: list[Perk] = [
-    Perk("vital_surge",   "Vital Surge",   "+1 max heart. Restore 1 HP.",          "♥", _vital_surge),
-    Perk("swift_boots",   "Swift Boots",   "+25% movement speed.",                  "⚡", _swift_boots),
-    Perk("power_draw",    "Power Draw",    "Arrows deal +1 damage.",                "↑", _power_draw),
-    Perk("rapid_fire",    "Rapid Fire",    "Shoot cooldown -30%.",                  "»", _rapid_fire),
-    Perk("piercing_shot", "Piercing Shot", "Arrows pierce through all enemies.",    "→", _piercing_shot),
-    Perk("double_shot",   "Double Shot",   "Each click fires two arrows.",          "«", _double_shot),
-    Perk("dash_master",   "Dash Master",   "Dash cooldown -30%.",                   "◇", _dash_master),
-    Perk("phantom_step",  "Phantom Step",  "Dash travels 30% further.",             "~", _phantom_step),
-    Perk("iron_hide",     "Iron Hide",     "Invincibility after hit +0.4 s.",       "■", _iron_hide),
-    Perk("swift_arrow",   "Swift Arrow",   "Arrow speed +35%.",                     "▶", _swift_arrow),
-    Perk("coin_magnet",   "Coin Magnet",   "Coin pull radius ×2.5.",               "$", _coin_magnet),
-    Perk("berserker",     "Berserker",     "Dash speed +25%.",                      "☁", _berserker),
+    Perk("vital_surge", "Vital Surge", "+1 max heart. Restore 1 HP.", "♥", _vital_surge),
+    Perk("swift_boots", "Swift Boots", "+25% movement speed.", "⚡", _swift_boots),
+    Perk("power_draw", "Power Draw", "Arrows deal +1 damage.", "↑", _power_draw),
+    Perk("rapid_fire", "Rapid Fire", "Shoot cooldown -30%.", "»", _rapid_fire),
+    Perk("piercing_shot", "Piercing Shot", "Arrows pierce through all enemies.", "→", _piercing_shot),
+    Perk("double_shot", "Double Shot", "Each click fires two arrows.", "«", _double_shot),
+    Perk("dash_master", "Dash Master", "Dash cooldown -30%.", "◇", _dash_master),
+    Perk("phantom_step", "Phantom Step", "Dash travels 30% further.", "~", _phantom_step),
+    Perk("iron_hide", "Iron Hide", "Invincibility after hit +0.4 s.", "■", _iron_hide),
+    Perk("swift_arrow", "Swift Arrow", "Arrow speed +35%.", "▶", _swift_arrow),
+    Perk("coin_magnet", "Coin Magnet", "Coin pull radius ×2.5.", "$", _coin_magnet),
+    Perk("berserker", "Berserker", "Dash speed +25%.", "☁", _berserker),
 ]

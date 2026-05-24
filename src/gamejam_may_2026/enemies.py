@@ -127,8 +127,7 @@ class Enemy:
             probe_y = self.y + d[1] * probe_r
             tc = int(probe_x // C.TILE_SIZE)
             tr = int(probe_y // C.TILE_SIZE)
-            wall = (0 <= tc < C.ROOM_TILE_W and 0 <= tr < C.ROOM_TILE_H
-                    and room.tiles[tr][tc] == C.TILE_WALL)
+            wall = 0 <= tc < C.ROOM_TILE_W and 0 <= tr < C.ROOM_TILE_H and room.tiles[tr][tc] == C.TILE_WALL
             score = d[0] * goal[0] + d[1] * goal[1] - (1.0 if wall else 0.0)
             if score > best_score:
                 best_score, best_dir = score, d
@@ -311,8 +310,7 @@ class GoblinArcher(Enemy):
             pygame.draw.line(surf, (160, 130, 85), (bow_cx + 1, sy), (sx + r + 4, sy), 1)
             # Arrowhead tip
             tip_x = sx + r + 4
-            pygame.draw.polygon(surf, (185, 155, 90), [
-                (tip_x + 4, sy), (tip_x, sy - 2), (tip_x, sy + 2)])
+            pygame.draw.polygon(surf, (185, 155, 90), [(tip_x + 4, sy), (tip_x, sy - 2), (tip_x, sy + 2)])
             # Eyes
             pygame.draw.circle(surf, (10, 10, 10), (sx - 4, sy - 3), 2)
             pygame.draw.circle(surf, (10, 10, 10), (sx + 4, sy - 3), 2)
@@ -1504,9 +1502,7 @@ class MagmaSlug(Enemy):
             ant_tip_col = (min(255, 240 + round(pulse * 15)), min(255, 100 + round(pulse * 55)), 10)
             for ax, tilt in ((-5, -3), (5, 3)):
                 # Stalk
-                pygame.draw.line(surf, C.C_SLUG_DARK,
-                                 (sx + ax, sy - r + 3),
-                                 (sx + ax + tilt, sy - r - 7), 2)
+                pygame.draw.line(surf, C.C_SLUG_DARK, (sx + ax, sy - r + 3), (sx + ax + tilt, sy - r - 7), 2)
                 # Glowing tip ball
                 pygame.draw.circle(surf, ant_tip_col, (sx + ax + tilt, sy - r - 7), 3)
                 pygame.draw.circle(surf, C.C_SLUG_DARK, (sx + ax + tilt, sy - r - 7), 3, 1)
@@ -1693,9 +1689,13 @@ class SporeElder(SporePlant):
                 a = random.uniform(0.0, math.pi * 2)
                 projs.append(
                     EnemyProjectile(
-                        self.x, self.y, a,
-                        speed=80, color=(120, 215, 90),
-                        damage=C.SPORE_DAMAGE, lifetime=5.0,
+                        self.x,
+                        self.y,
+                        a,
+                        speed=80,
+                        color=(120, 215, 90),
+                        damage=C.SPORE_DAMAGE,
+                        lifetime=5.0,
                     )
                 )
             self._cloud_cd = 7.0
@@ -1713,9 +1713,13 @@ class SporeElder(SporePlant):
                         angle = math.radians(rot + i * 90.0)
                         projs.append(
                             EnemyProjectile(
-                                self.x, self.y, angle,
-                                speed=C.SPORE_SPEED, color=(120, 215, 90),
-                                damage=C.SPORE_DAMAGE, lifetime=C.SPORE_LIFETIME,
+                                self.x,
+                                self.y,
+                                angle,
+                                speed=C.SPORE_SPEED,
+                                color=(120, 215, 90),
+                                damage=C.SPORE_DAMAGE,
+                                lifetime=C.SPORE_LIFETIME,
                             )
                         )
                 sounds.play("spore_shoot")
@@ -1796,8 +1800,12 @@ class IronWarden(Enemy):
 
     def __init__(self, x: float, y: float) -> None:
         super().__init__(
-            x, y, hp=C.WARDEN_HP, radius=C.WARDEN_RADIUS,
-            speed=C.WARDEN_SPEED, coin_drop=C.WARDEN_COIN_DROP,
+            x,
+            y,
+            hp=C.WARDEN_HP,
+            radius=C.WARDEN_RADIUS,
+            speed=C.WARDEN_SPEED,
+            coin_drop=C.WARDEN_COIN_DROP,
         )
         self._summon_queue: list[Enemy] = []
 
@@ -1806,7 +1814,7 @@ class IronWarden(Enemy):
         self._stomp_winding: bool = False
         self._stomp_wind_up: float = 0.0
         self._stomp_target: tuple[float, float] | None = None
-        self._stomp_ring_t: float = 0.0   # brief impact ring
+        self._stomp_ring_t: float = 0.0  # brief impact ring
 
         # Shrapnel
         self._shrapnel_cd: float = C.WARDEN_SHRAPNEL_CD
@@ -1926,10 +1934,17 @@ class IronWarden(Enemy):
                     # 8-way ring
                     for i in range(8):
                         a = math.radians(i * 45.0)
-                        projs.append(EnemyProjectile(
-                            self.x, self.y, a,
-                            speed=260, color=C.C_WARDEN_SPARK, damage=1, lifetime=2.0,
-                        ))
+                        projs.append(
+                            EnemyProjectile(
+                                self.x,
+                                self.y,
+                                a,
+                                speed=260,
+                                color=C.C_WARDEN_SPARK,
+                                damage=1,
+                                lifetime=2.0,
+                            )
+                        )
                 else:
                     # 4-way semicone toward player
                     base_a = math.atan2(dy, dx)
@@ -1937,10 +1952,17 @@ class IronWarden(Enemy):
                     step = spread * 2 / 3
                     for i in range(4):
                         a = base_a - spread + i * step
-                        projs.append(EnemyProjectile(
-                            self.x, self.y, a,
-                            speed=260, color=C.C_WARDEN_SPARK, damage=1, lifetime=2.0,
-                        ))
+                        projs.append(
+                            EnemyProjectile(
+                                self.x,
+                                self.y,
+                                a,
+                                speed=260,
+                                color=C.C_WARDEN_SPARK,
+                                damage=1,
+                                lifetime=2.0,
+                            )
+                        )
                 sounds.play("spore_shoot")
                 self._shrapnel_cd = C.WARDEN_SHRAPNEL_CD
                 self._shrapnel_winding = False
@@ -1977,8 +1999,7 @@ class IronWarden(Enemy):
             ring_r = 10 + round(frac * 55)
             alpha = int((1.0 - frac) * 200)
             ring_surf = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4), pygame.SRCALPHA)
-            pygame.draw.circle(ring_surf, (220, 185, 80, alpha),
-                               (ring_r + 2, ring_r + 2), ring_r, 3)
+            pygame.draw.circle(ring_surf, (220, 185, 80, alpha), (ring_r + 2, ring_r + 2), ring_r, 3)
             surf.blit(ring_surf, (round(stx) - ring_r - 2, round(sty) - ring_r - 2))
 
         # Charge telegraph arrow
@@ -2026,8 +2047,12 @@ class AbyssalLeech(Enemy):
 
     def __init__(self, x: float, y: float) -> None:
         super().__init__(
-            x, y, hp=C.LEECH_HP, radius=C.LEECH_RADIUS,
-            speed=0.0, coin_drop=C.LEECH_COIN_DROP,
+            x,
+            y,
+            hp=C.LEECH_HP,
+            radius=C.LEECH_RADIUS,
+            speed=0.0,
+            coin_drop=C.LEECH_COIN_DROP,
         )
         self._summon_queue: list[Enemy] = []
 
@@ -2045,7 +2070,7 @@ class AbyssalLeech(Enemy):
         super().take_hit(damage, particles)
         if not was_p2 and self._phase2 and self.alive:
             self.phase2_just_triggered = True
-            self.speed = C.LEECH_SPEED_P2   # begin moving in P2
+            self.speed = C.LEECH_SPEED_P2  # begin moving in P2
             particles.emit_leech_phase2(self.x, self.y)
         if not self.alive:
             particles.emit_leech_death(self.x, self.y)
@@ -2083,10 +2108,15 @@ class AbyssalLeech(Enemy):
             for i in range(count):
                 a = base_a + (i - half) * math.radians(30)
                 ep = EnemyProjectile(
-                    self.x, self.y, a,
-                    speed=165, color=C.C_LEECH_SHOT, damage=1, lifetime=4.0,
+                    self.x,
+                    self.y,
+                    a,
+                    speed=165,
+                    color=C.C_LEECH_SHOT,
+                    damage=1,
+                    lifetime=4.0,
                 )
-                ep.homing = True      # game.py steers toward player each frame
+                ep.homing = True  # game.py steers toward player each frame
                 ep.leech_owner = self  # game.py heals self when this hits
                 projs.append(ep)
             sounds.play("spore_shoot")
@@ -2099,10 +2129,17 @@ class AbyssalLeech(Enemy):
             base_a2 = math.atan2(dy, dx) if dist > 0 else 0.0
             for i in range(6):
                 a = base_a2 + math.radians(i * 60)
-                projs.append(EnemyProjectile(
-                    self.x, self.y, a,
-                    speed=200, color=C.C_LEECH_SHOT, damage=1, lifetime=2.5,
-                ))
+                projs.append(
+                    EnemyProjectile(
+                        self.x,
+                        self.y,
+                        a,
+                        speed=200,
+                        color=C.C_LEECH_SHOT,
+                        damage=1,
+                        lifetime=2.5,
+                    )
+                )
             sounds.play("spore_shoot")
             self._burst_cd = burst_cd
 
@@ -2126,15 +2163,13 @@ class AbyssalLeech(Enemy):
 
         # Maw / mouth detail
         if self._flash <= 0:
-            pygame.draw.ellipse(surf, C.C_LEECH_SHOT,
-                                (body_sx - 10, body_sy - 5, 20, 12))
-            pygame.draw.ellipse(surf, C.C_LEECH_DARK,
-                                (body_sx - 7, body_sy - 3, 14, 8))
+            pygame.draw.ellipse(surf, C.C_LEECH_SHOT, (body_sx - 10, body_sy - 5, 20, 12))
+            pygame.draw.ellipse(surf, C.C_LEECH_DARK, (body_sx - 7, body_sy - 3, 14, 8))
             # Teeth
             for tooth_x in (-5, 0, 5):
-                pygame.draw.line(surf, C.C_LEECH_SHOT,
-                                 (body_sx + tooth_x, body_sy - 3),
-                                 (body_sx + tooth_x, body_sy + 2), 2)
+                pygame.draw.line(
+                    surf, C.C_LEECH_SHOT, (body_sx + tooth_x, body_sy - 3), (body_sx + tooth_x, body_sy + 2), 2
+                )
 
 
 # ── Fungal Matriarch (floor 6 boss) ──────────────────────────────────────────
@@ -2147,15 +2182,19 @@ class FungalMatriarch(Enemy):
     is_boss_enemy = True
     boss_name = "Fungal Matriarch"
     _phase2_shake = 14
-    _spore_cloud_passive = True   # game.py reads this to apply aura DoT
+    _spore_cloud_passive = True  # game.py reads this to apply aura DoT
 
     _DEATH_COLOR_A = C.C_MATRIARCH
     _DEATH_COLOR_B = (155, 210, 85)
 
     def __init__(self, x: float, y: float, *, floor: int = 1) -> None:
         super().__init__(
-            x, y, hp=C.MATRIARCH_HP, radius=C.MATRIARCH_RADIUS,
-            speed=0.0, coin_drop=C.MATRIARCH_COIN_DROP,
+            x,
+            y,
+            hp=C.MATRIARCH_HP,
+            radius=C.MATRIARCH_RADIUS,
+            speed=0.0,
+            coin_drop=C.MATRIARCH_COIN_DROP,
         )
         self.floor = floor
         self._summon_queue: list[Enemy] = []
@@ -2165,7 +2204,7 @@ class FungalMatriarch(Enemy):
         self._spore_wind_up: float = 0.0
 
         self._summon_cd: float = C.MATRIARCH_SUMMON_CD
-        self._summon_counter: int = 0   # alternates SporeElder / VenomfangBat in P2
+        self._summon_counter: int = 0  # alternates SporeElder / VenomfangBat in P2
 
         self._pulse_t: float = random.uniform(0.0, 6.28)
 
@@ -2217,11 +2256,17 @@ class FungalMatriarch(Enemy):
                 base_a = math.atan2(dy, dx) if dist > 0 else 0.0
                 for i in range(5):
                     a = base_a + math.radians(-32 + i * 16)
-                    projs.append(EnemyProjectile(
-                        self.x, self.y, a,
-                        speed=C.SPORE_SPEED, color=C.C_MATRIARCH_SPORE,
-                        damage=1, lifetime=C.SPORE_LIFETIME + 0.5,
-                    ))
+                    projs.append(
+                        EnemyProjectile(
+                            self.x,
+                            self.y,
+                            a,
+                            speed=C.SPORE_SPEED,
+                            color=C.C_MATRIARCH_SPORE,
+                            damage=1,
+                            lifetime=C.SPORE_LIFETIME + 0.5,
+                        )
+                    )
                 sounds.play("spore_shoot")
                 self._spore_cd = spore_cd
                 self._spore_winding = False
@@ -2293,15 +2338,19 @@ class VoidSovereign(Enemy):
     is_boss_enemy = True
     boss_name = "Void Sovereign"
     _phase2_shake = 18
-    is_void_sovereign = True   # game.py reads this to apply void-field clamp + draw
+    is_void_sovereign = True  # game.py reads this to apply void-field clamp + draw
 
     _DEATH_COLOR_A = (80, 20, 160)
     _DEATH_COLOR_B = (130, 55, 255)
 
     def __init__(self, x: float, y: float) -> None:
         super().__init__(
-            x, y, hp=C.SOVEREIGN_HP, radius=C.SOVEREIGN_RADIUS,
-            speed=C.SOVEREIGN_SPEED, coin_drop=C.SOVEREIGN_COIN_DROP,
+            x,
+            y,
+            hp=C.SOVEREIGN_HP,
+            radius=C.SOVEREIGN_RADIUS,
+            speed=C.SOVEREIGN_SPEED,
+            coin_drop=C.SOVEREIGN_COIN_DROP,
         )
         self._summon_queue: list[Enemy] = []
 
@@ -2379,18 +2428,32 @@ class VoidSovereign(Enemy):
                     # 8-way full ring
                     for i in range(8):
                         a = math.radians(i * 45.0)
-                        projs.append(EnemyProjectile(
-                            self.x, self.y, a,
-                            speed=235, color=C.C_SOVEREIGN_SHOT, damage=1, lifetime=2.2,
-                        ))
+                        projs.append(
+                            EnemyProjectile(
+                                self.x,
+                                self.y,
+                                a,
+                                speed=235,
+                                color=C.C_SOVEREIGN_SHOT,
+                                damage=1,
+                                lifetime=2.2,
+                            )
+                        )
                 else:
                     # 5-way fan toward player
                     for i in range(5):
                         a = base_a + math.radians(-28 + i * 14)
-                        projs.append(EnemyProjectile(
-                            self.x, self.y, a,
-                            speed=235, color=C.C_SOVEREIGN_SHOT, damage=1, lifetime=2.2,
-                        ))
+                        projs.append(
+                            EnemyProjectile(
+                                self.x,
+                                self.y,
+                                a,
+                                speed=235,
+                                color=C.C_SOVEREIGN_SHOT,
+                                damage=1,
+                                lifetime=2.2,
+                            )
+                        )
                 sounds.play("spore_shoot")
                 self._burst_cd = burst_cd
                 self._burst_winding = False

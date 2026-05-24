@@ -54,7 +54,7 @@ from gamejam_may_2026.player import Player
 from gamejam_may_2026.projectiles import Arrow, EnemyProjectile
 from gamejam_may_2026.relics import RELIC_POOL, Relic
 from gamejam_may_2026.rooms import Room
-from gamejam_may_2026.ui import _relic_card_rect, _upgrade_card_rect
+from gamejam_may_2026.ui import _arena_card_rect, _relic_card_rect, _upgrade_card_rect
 
 # ── High-score persistence ────────────────────────────────────────────────────
 _SAVE_DIR = Path.home() / ".verdant-depths"
@@ -134,6 +134,177 @@ def _draw_gates(
                 bar_x = ox + 2 + i * 6
                 sx, sy = camera.apply_pos(bar_x, door_top)
                 pygame.draw.rect(surf, _GATE_COL, (round(sx), round(sy), 4, ts * 3))
+
+
+# ── Arena mode enemy roster ────────────────────────────────────────────────────
+
+_ARENA_ENTRIES: list[dict] = [
+    # ── Regular enemies ──────────────────────────────────────────────────────
+    # cls / cls_kwargs are used for static sprite previews in the selection screen
+    {
+        "name": "Goblin Runner",
+        "cls": GoblinRunner,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: GoblinRunner(x, y, floor=1),
+        "is_boss": False,
+        "max_count": 15,
+        "desc": "Fast wall-aware melee",
+    },
+    {
+        "name": "Goblin Archer",
+        "cls": GoblinArcher,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: GoblinArcher(x, y, floor=1),
+        "is_boss": False,
+        "max_count": 12,
+        "desc": "Ranged, keeps distance",
+    },
+    {
+        "name": "Wolf",
+        "cls": Wolf,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: Wolf(x, y, floor=1),
+        "is_boss": False,
+        "max_count": 12,
+        "desc": "Melee flanker, lunges",
+    },
+    {
+        "name": "Spore Plant",
+        "cls": SporePlant,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: SporePlant(x, y, floor=1),
+        "is_boss": False,
+        "max_count": 10,
+        "desc": "Stationary 4-way volleys",
+    },
+    {
+        "name": "Spore Elder",
+        "cls": SporeElder,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: SporeElder(x, y, floor=5),
+        "is_boss": False,
+        "max_count": 6,
+        "desc": "Elite 8-way + spore cloud",
+    },
+    {
+        "name": "Stone Crawler",
+        "cls": StoneCrawler,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: StoneCrawler(x, y, floor=4),
+        "is_boss": False,
+        "max_count": 10,
+        "desc": "Armoured, 3-hit deflect",
+    },
+    {
+        "name": "Venomfang Bat",
+        "cls": VenomfangBat,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: VenomfangBat(x, y, floor=4),
+        "is_boss": False,
+        "max_count": 15,
+        "desc": "Fast erratic melee",
+    },
+    {
+        "name": "Crystal Turret",
+        "cls": CrystalTurret,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: CrystalTurret(x, y, floor=5),
+        "is_boss": False,
+        "max_count": 8,
+        "desc": "Rotating 3-way, immune front",
+    },
+    {
+        "name": "Shadow Wraith",
+        "cls": ShadowWraith,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: ShadowWraith(x, y, floor=5),
+        "is_boss": False,
+        "max_count": 8,
+        "desc": "Teleporting, homing shots",
+    },
+    {
+        "name": "Bone Archer",
+        "cls": BoneArcher,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: BoneArcher(x, y, floor=6),
+        "is_boss": False,
+        "max_count": 10,
+        "desc": "3-way spread + bone spike",
+    },
+    {
+        "name": "Magma Slug",
+        "cls": MagmaSlug,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: MagmaSlug(x, y, floor=6),
+        "is_boss": False,
+        "max_count": 6,
+        "desc": "Slow, drops burn patches",
+    },
+    {
+        "name": "Void Shrieker",
+        "cls": VoidShrieker,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: VoidShrieker(x, y, floor=7),
+        "is_boss": False,
+        "max_count": 12,
+        "desc": "8-way death burst",
+    },
+    # ── Bosses ───────────────────────────────────────────────────────────────
+    {
+        "name": "Goblin Shaman",
+        "cls": GoblinShaman,
+        "cls_kwargs": {"floor": 1},
+        "spawner": lambda x, y: GoblinShaman(x, y, floor=1),
+        "is_boss": True,
+        "max_count": 5,
+        "desc": "Burst volleys + summons",
+    },
+    {
+        "name": "Ancient Tree",
+        "cls": AncientTree,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: AncientTree(x, y),
+        "is_boss": True,
+        "max_count": 5,
+        "desc": "Root burst + thorn ring",
+    },
+    {
+        "name": "Iron Warden",
+        "cls": IronWarden,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: IronWarden(x, y),
+        "is_boss": True,
+        "max_count": 5,
+        "desc": "Stomp AoE + charge dash",
+    },
+    {
+        "name": "Abyssal Leech",
+        "cls": AbyssalLeech,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: AbyssalLeech(x, y),
+        "is_boss": True,
+        "max_count": 5,
+        "desc": "Homing tendrils, self-heals",
+    },
+    {
+        "name": "Fungal Matriarch",
+        "cls": FungalMatriarch,
+        "cls_kwargs": {"floor": 6},
+        "spawner": lambda x, y: FungalMatriarch(x, y, floor=6),
+        "is_boss": True,
+        "max_count": 5,
+        "desc": "Spore volleys + spore aura",
+    },
+    {
+        "name": "Void Sovereign",
+        "cls": VoidSovereign,
+        "cls_kwargs": {},
+        "spawner": lambda x, y: VoidSovereign(x, y),
+        "is_boss": True,
+        "max_count": 5,
+        "desc": "8-way burst + void arena",
+    },
+]
 
 
 # ── Coin ───────────────────────────────────────────────────────────────────────
@@ -301,9 +472,9 @@ class BurnPatch:
 def _available_perks(player: Player) -> list[Perk]:
     """Return PERK_POOL excluding one-shot perks already applied to this player."""
     pool = [
-        p for p in PERK_POOL
-        if not ((p.id == "piercing_shot" and player.piercing)
-                or (p.id == "double_shot" and player.double_shot))
+        p
+        for p in PERK_POOL
+        if not ((p.id == "piercing_shot" and player.piercing) or (p.id == "double_shot" and player.double_shot))
     ]
     return pool if len(pool) >= 3 else PERK_POOL
 
@@ -335,8 +506,7 @@ def _pack_wave(
     else:  # shrieker
         n, cls = random.randint(4, 5), VoidShrieker
 
-    positions = room.get_spawn_positions(n, min_dist_from_centre=150.0,
-                                         exclude_pos=exclude_pos)
+    positions = room.get_spawn_positions(n, min_dist_from_centre=150.0, exclude_pos=exclude_pos)
     return [cls(px, py, floor=floor) for px, py in positions]
 
 
@@ -354,7 +524,7 @@ def _spawn_wave(
     wolves = (1, 1, 2, 2, 2, 2, 2)[fl - 1]
     archers = (1, 2, 2, 2, 3, 3, 3)[fl - 1] if depth >= 2 else 0
     plants = (1, 1, 2, 2, 2, 2, 3)[fl - 1] if depth >= 3 else 0
-    elders = (0, 0, 0, 0, 1, 1, 1)[fl - 1] if depth >= 3 else 0   # floor 5+ — elite SporePlant
+    elders = (0, 0, 0, 0, 1, 1, 1)[fl - 1] if depth >= 3 else 0  # floor 5+ — elite SporePlant
     crawlers = (0, 0, 0, 1, 1, 2, 2)[fl - 1]  # floor 4+ — armoured melee
     bats = (0, 0, 0, 1, 2, 2, 3)[fl - 1]  # floor 4+ — fast arc mover
     turrets = (0, 0, 0, 0, 1, 1, 2)[fl - 1]  # floor 5+ — stationary, directional
@@ -363,7 +533,20 @@ def _spawn_wave(
     slugs = (0, 0, 0, 0, 0, 1, 1)[fl - 1]  # floor 6+ — slow melee + burn patches
     shriekers = (0, 0, 0, 0, 0, 0, 1)[fl - 1]  # floor 7  — death burst + void flash
 
-    total = runners + wolves + archers + plants + elders + crawlers + bats + turrets + wraiths + bone_archers + slugs + shriekers
+    total = (
+        runners
+        + wolves
+        + archers
+        + plants
+        + elders
+        + crawlers
+        + bats
+        + turrets
+        + wraiths
+        + bone_archers
+        + slugs
+        + shriekers
+    )
     positions = room.get_spawn_positions(total, exclude_pos=exclude_pos)
     idx = 0
     wave: list[Enemy] = []
@@ -465,6 +648,14 @@ class Game:
         self._codex_tab: int = 0
         self._codex_scroll: int = 0
 
+        # Main menu button hover state
+        self._menu_hovered: int = -1  # 0=dungeon 1=arena 2=codex
+
+        # Arena mode state (persists across arena sessions)
+        self._arena_selected: int = 0  # index into _ARENA_ENTRIES
+        self._arena_count: int = 1  # enemies to spawn
+        self._arena_focus: str = "grid"  # "grid" | "count" | "start"
+
     # ── Init ──────────────────────────────────────────────────────────────────
     def _new_game(self) -> None:
         self.state = "PLAYING"
@@ -541,7 +732,7 @@ class Game:
     def handle_event(self, event: pygame.event.Event) -> None:
         # Escape toggles pause from any live gameplay state
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            if self.state in ("PLAYING", "UPGRADE", "SHOP", "FLOOR_CLEAR", "RELIC"):
+            if self.state in ("PLAYING", "UPGRADE", "SHOP", "FLOOR_CLEAR", "RELIC", "ARENA"):
                 self._pre_pause_state = self.state
                 self.state = "PAUSED"
                 return
@@ -550,13 +741,50 @@ class Game:
                 return
 
         if self.state == "MENU":
-            # C opens the Codex; any other key/click starts a new run
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_c:
-                self._codex_tab = 0
-                self._codex_scroll = 0
-                self.state = "CODEX"
-            elif event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
-                self._new_game()
+            if event.type == pygame.MOUSEMOTION:
+                self._menu_hovered = ui.menu_button_at(*event.pos)
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                idx = ui.menu_button_at(*event.pos)
+                if idx == 0:
+                    self._new_game()
+                elif idx == 1:
+                    self._arena_focus = "grid"
+                    self.state = "ARENA_SELECT"
+                elif idx == 2:
+                    self._codex_tab = 0
+                    self._codex_scroll = 0
+                    self.state = "CODEX"
+            elif event.type == pygame.KEYDOWN:
+                k = event.key
+                if k == pygame.K_RETURN or k == pygame.K_KP_ENTER or k == pygame.K_SPACE:
+                    if self._menu_hovered == 1:
+                        self._arena_focus = "grid"
+                        self.state = "ARENA_SELECT"
+                    elif self._menu_hovered == 2:
+                        self._codex_tab = 0
+                        self._codex_scroll = 0
+                        self.state = "CODEX"
+                    else:
+                        self._new_game()
+                elif k == pygame.K_UP or k == pygame.K_DOWN:
+                    n = 3
+                    cur = self._menu_hovered if self._menu_hovered >= 0 else 0
+                    self._menu_hovered = (cur + (1 if k == pygame.K_DOWN else -1)) % n
+                # Legacy shortcuts
+                elif k == pygame.K_a:
+                    self._arena_focus = "grid"
+                    self.state = "ARENA_SELECT"
+                elif k == pygame.K_c:
+                    self._codex_tab = 0
+                    self._codex_scroll = 0
+                    self.state = "CODEX"
+        elif self.state == "ARENA_SELECT":
+            self._handle_arena_select_event(event)
+        elif self.state == "ARENA":
+            self.player.handle_event(event, self.particles)
+        elif self.state in ("ARENA_WIN", "ARENA_DEAD"):
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+                self.state = "MENU"
         elif self.state == "CODEX":
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
@@ -625,6 +853,351 @@ class Game:
                 self.state = self._pre_pause_state
             elif menu_rect.collidepoint(event.pos):
                 self.state = "MENU"
+
+    # ── Arena mode ────────────────────────────────────────────────────────────
+    def _handle_arena_select_event(self, event: pygame.event.Event) -> None:
+        n = len(_ARENA_ENTRIES)
+        cols = ui._ARENA_COLS
+        rows = (n + cols - 1) // cols
+        sel = self._arena_selected
+        cur_row = sel // cols
+        cur_col = sel % cols
+
+        def _max_c() -> int:
+            return _ARENA_ENTRIES[self._arena_selected]["max_count"]
+
+        if event.type == pygame.KEYDOWN:
+            k = event.key
+
+            if k == pygame.K_ESCAPE:
+                self.state = "MENU"
+                return
+
+            # Enter / Space always start from any focus
+            if k in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+                self._start_arena()
+                return
+
+            # Tab cycles focus forward; Shift+Tab backward
+            if k == pygame.K_TAB:
+                order = ["grid", "count", "start"]
+                idx = order.index(self._arena_focus)
+                self._arena_focus = order[(idx + (-1 if event.mod & pygame.KMOD_SHIFT else 1)) % len(order)]
+                return
+
+            if self._arena_focus == "grid":
+                if k in (pygame.K_LEFT, pygame.K_KP4):
+                    new_col = (cur_col - 1) % cols
+                    self._arena_selected = cur_row * cols + new_col
+                    self._arena_count = min(self._arena_count, _max_c())
+                elif k in (pygame.K_RIGHT, pygame.K_KP6):
+                    new_col = (cur_col + 1) % cols
+                    self._arena_selected = (
+                        cur_row * cols + min(new_col, n - 1 - cur_row * cols) if False else cur_row * cols + new_col
+                    )
+                    self._arena_selected = min(self._arena_selected, n - 1)
+                    self._arena_count = min(self._arena_count, _max_c())
+                elif k in (pygame.K_UP, pygame.K_KP8):
+                    if cur_row == 0:
+                        pass  # already at top, stay
+                    else:
+                        self._arena_selected = (cur_row - 1) * cols + cur_col
+                    self._arena_count = min(self._arena_count, _max_c())
+                elif k in (pygame.K_DOWN, pygame.K_KP2):
+                    if cur_row >= rows - 1:
+                        # Bottom row → move focus to count
+                        self._arena_focus = "count"
+                    else:
+                        self._arena_selected = min((cur_row + 1) * cols + cur_col, n - 1)
+                    self._arena_count = min(self._arena_count, _max_c())
+
+            elif self._arena_focus == "count":
+                if k in (pygame.K_LEFT, pygame.K_KP4):
+                    self._arena_count = max(1, self._arena_count - 1)
+                elif k in (pygame.K_RIGHT, pygame.K_KP6):
+                    self._arena_count = min(_max_c(), self._arena_count + 1)
+                elif k in (pygame.K_UP, pygame.K_KP8):
+                    self._arena_focus = "grid"
+                elif k in (pygame.K_DOWN, pygame.K_KP2):
+                    self._arena_focus = "start"
+
+            elif self._arena_focus == "start":
+                if k in (pygame.K_UP, pygame.K_KP8):
+                    self._arena_focus = "count"
+
+        elif event.type == pygame.MOUSEMOTION:
+            # Hovering over start button updates focus visually
+            if ui.arena_start_button_rect().collidepoint(event.pos):
+                self._arena_focus = "start"
+
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                # Click on enemy card
+                for i in range(n):
+                    if _arena_card_rect(i).collidepoint(event.pos):
+                        self._arena_selected = i
+                        self._arena_count = min(self._arena_count, _max_c())
+                        self._arena_focus = "grid"
+                        break
+                # Click on start button
+                if ui.arena_start_button_rect().collidepoint(event.pos):
+                    self._start_arena()
+                    return
+                # Click on count arrows
+                dec_r, inc_r = ui.arena_count_arrow_rects()
+                if dec_r.collidepoint(event.pos):
+                    self._arena_count = max(1, self._arena_count - 1)
+                    self._arena_focus = "count"
+                elif inc_r.collidepoint(event.pos):
+                    self._arena_count = min(_max_c(), self._arena_count + 1)
+                    self._arena_focus = "count"
+            elif event.button == 4:  # scroll up → +count
+                self._arena_count = min(_max_c(), self._arena_count + 1)
+            elif event.button == 5:  # scroll down → -count
+                self._arena_count = max(1, self._arena_count - 1)
+
+    def _start_arena(self) -> None:
+        """Spawn the selected enemy (and count) in a fresh room; enter ARENA state."""
+        entry = _ARENA_ENTRIES[self._arena_selected]
+        count = self._arena_count
+
+        # Fresh dungeon for a clean room — use the start room only
+        self.dungeon = Dungeon(floor=1)
+        dr = self.dungeon.current
+        room = dr.room
+
+        # Fresh player — no relics, no perks
+        px, py = room.find_spawn_near_centre(float(C.PLAYER_RADIUS))
+        self.player = Player(px, py)
+
+        # Spawn enemies away from player
+        positions = room.get_spawn_positions(count, min_dist_from_centre=100.0, exclude_pos=(px, py))
+        # Pad if the room can't place all of them (very high count edge case)
+        while len(positions) < count:
+            ex, ey = room.find_spawn_near_centre(30.0)
+            positions.append((ex, ey))
+
+        spawner = entry["spawner"]
+        self.enemies = [spawner(ex, ey) for ex, ey in positions[:count]]
+
+        # Clear all transient game objects
+        self.enemy_projectiles = []
+        self.coins = []
+        self.chests = []
+        self.burn_patches = []
+        self.camera = Camera()
+        self.particles = ParticleSystem()
+        self._blur_clones = []
+        self._trans_t = 0.0
+        self._trans_wdx = 0.0
+        self._trans_wdy = 0.0
+        self._trans_next = None
+        self._trans_old_room = None
+        self._boss_hint_t = 0.0
+        self._boss_hint_dir = "N"
+        self._show_staircase = False
+        self._staircase_t = 0.0
+        self._void_flash_t = 0.0
+        self._burn_dot_acc = 0.0
+        self._mat_aura_acc = 0.0
+        self._pre_pause_state = "ARENA"
+        # Upgrade/relic UI (unused in arena, but must exist for draw())
+        self._upgrade_perks = []
+        self._upgrade_hovered = -1
+        self._upgrade_open_ms = 0
+        self._relic_choices = []
+        self._relic_hovered = -1
+        self._shop_hovered = -1
+
+        self.state = "ARENA"
+
+    def _update_arena(self, dt: float) -> None:
+        """Simplified gameplay loop for the arena (no items, no progression)."""
+        room = self._room
+        p = self.player
+
+        # ── Player ────────────────────────────────────────────────────────────
+        self.player.update(dt, room, self.particles)
+        if self.player.dead:
+            self.state = "ARENA_DEAD"
+            return
+
+        # ── Always block ALL door openings (sealed arena) ─────────────────────
+        ts = C.TILE_SIZE
+        r = C.PLAYER_RADIUS
+        margin = ts + r
+        ns_lo = (C.ROOM_TILE_W // 2 - 1) * ts - r
+        ns_hi = (C.ROOM_TILE_W // 2 + 2) * ts + r
+        ew_lo = (C.ROOM_TILE_H // 2 - 1) * ts - r
+        ew_hi = (C.ROOM_TILE_H // 2 + 2) * ts + r
+        if "N" in room.doors and p.y < margin and ns_lo < p.x < ns_hi:
+            p.y = margin
+        if "S" in room.doors and p.y > C.ROOM_PIXEL_H - margin and ns_lo < p.x < ns_hi:
+            p.y = C.ROOM_PIXEL_H - margin
+        if "W" in room.doors and p.x < margin and ew_lo < p.y < ew_hi:
+            p.x = margin
+        if "E" in room.doors and p.x > C.ROOM_PIXEL_W - margin and ew_lo < p.y < ew_hi:
+            p.x = C.ROOM_PIXEL_W - margin
+
+        # Void Sovereign P2 shrinking arena
+        for e in self.enemies:
+            if getattr(e, "is_void_sovereign", False) and e.alive:
+                vm = getattr(e, "_void_margin", 0.0)
+                if vm > 0:
+                    p.x = max(vm + p.radius, min(C.ROOM_PIXEL_W - vm - p.radius, p.x))
+                    p.y = max(vm + p.radius, min(C.ROOM_PIXEL_H - vm - p.radius, p.y))
+                break
+
+        self._void_flash_t = max(0.0, self._void_flash_t - dt)
+
+        # ── Enemies ───────────────────────────────────────────────────────────
+        for e in self.enemies:
+            e.update(dt, self.player, room, self.particles, self.enemy_projectiles)
+
+        # Drain summon queues (boss minions)
+        new_summons: list[Enemy] = []
+        for e in self.enemies:
+            q = getattr(e, "_summon_queue", None)
+            if q:
+                new_summons.extend(q)
+                q.clear()
+        self.enemies.extend(new_summons)
+
+        # Drain burn patch queues (MagmaSlug)
+        for e in self.enemies:
+            pq = getattr(e, "_patch_queue", None)
+            if pq:
+                for bx, by in pq:
+                    self.burn_patches.append(BurnPatch(bx, by))
+                pq.clear()
+
+        # Drain VoidShrieker hit-shake + death-burst queues
+        for e in self.enemies:
+            if getattr(e, "_hit_shake", False):
+                e._hit_shake = False  # type: ignore[attr-defined]
+                self.camera.add_shake(4)
+                self._void_flash_t = max(self._void_flash_t, 0.25)
+            dps = getattr(e, "_death_projs", None)
+            if dps:
+                self.enemy_projectiles.extend(dps)
+                dps.clear()
+
+        # Steer homing projectiles
+        for ep in self.enemy_projectiles:
+            if getattr(ep, "homing", False):
+                dx2 = self.player.x - ep.x
+                dy2 = self.player.y - ep.y
+                dist2 = math.hypot(dx2, dy2) or 1.0
+                tx = dx2 / dist2
+                ty = dy2 / dist2
+                spd = math.hypot(ep.vx, ep.vy) or 1.0
+                cx2 = ep.vx / spd
+                cy2 = ep.vy / spd
+                turn = math.radians(180.0 * dt)
+                cross = cx2 * ty - cy2 * tx
+                dot = cx2 * tx + cy2 * ty
+                angle = max(-turn, min(turn, math.atan2(cross, dot)))
+                cos_a, sin_a = math.cos(angle), math.sin(angle)
+                ep.vx = (cx2 * cos_a - cy2 * sin_a) * spd
+                ep.vy = (cx2 * sin_a + cy2 * cos_a) * spd
+
+        for ep in self.enemy_projectiles:
+            ep.update(dt, room)
+
+        # ── Arrow ↔ enemy collisions ──────────────────────────────────────────
+        for arrow in self.player.arrows:
+            if not arrow.alive:
+                continue
+            for enemy in self.enemies:
+                if not enemy.alive:
+                    continue
+                if id(enemy) in arrow.hit_enemies:
+                    continue
+                if (arrow.x - enemy.x) ** 2 + (arrow.y - enemy.y) ** 2 < (enemy.radius + 5) ** 2:
+                    arrow.hit_enemies.add(id(enemy))
+                    if not arrow.piercing:
+                        arrow.alive = False
+                    actual_dmg = arrow.damage
+                    if getattr(arrow, "_overcharged", False):
+                        actual_dmg = arrow.damage * 3
+                    if isinstance(enemy, CrystalTurret):
+                        impact = math.atan2(arrow.y - enemy.y, arrow.x - enemy.x)
+                        diff = math.atan2(
+                            math.sin(impact - enemy._face_angle),
+                            math.cos(impact - enemy._face_angle),
+                        )
+                        if abs(diff) < math.pi / 3:
+                            actual_dmg = 0
+                        elif abs(diff) > math.pi * 2 / 3:
+                            actual_dmg = max(actual_dmg, arrow.damage * 2)
+                    if actual_dmg > 0:
+                        enemy.take_hit(actual_dmg, self.particles)
+                    self.camera.add_shake(3)
+                    if getattr(enemy, "phase2_just_triggered", False):
+                        enemy.phase2_just_triggered = False
+                        self.camera.add_shake(getattr(enemy, "_phase2_shake", 14))
+
+        # ── Enemy projectile ↔ player collisions ──────────────────────────────
+        for ep in self.enemy_projectiles:
+            if not ep.alive:
+                continue
+            if (ep.x - self.player.x) ** 2 + (ep.y - self.player.y) ** 2 < (C.PLAYER_RADIUS + 6) ** 2:
+                ep.alive = False
+                if self.player.take_damage(ep.damage):
+                    self.particles.emit_player_hurt(self.player.x, self.player.y)
+                    self.camera.add_shake(6)
+                    # Abyssal Leech tendril healing
+                    leech = getattr(ep, "leech_owner", None)
+                    if leech is not None and leech.alive:
+                        leech.hp = min(leech.max_hp, leech.hp + 3)
+
+        self.enemies = [e for e in self.enemies if e.alive]
+        self.enemy_projectiles = [ep for ep in self.enemy_projectiles if ep.alive]
+
+        # Drain any late VoidShrieker death bursts
+        for e in self.enemies:
+            dps = getattr(e, "_death_projs", None)
+            if dps:
+                self.enemy_projectiles.extend(dps)
+                dps.clear()
+
+        # ── Burn patches ──────────────────────────────────────────────────────
+        _bda = getattr(self, "_burn_dot_acc", 0.0)
+        burn_overlap = any(patch.update(dt, self.player) for patch in self.burn_patches)
+        if burn_overlap:
+            _bda += dt
+            if _bda >= 1.0:
+                _bda -= 1.0
+                if self.player.take_damage(1):
+                    self.particles.emit_player_hurt(self.player.x, self.player.y)
+                    self.camera.add_shake(4)
+        else:
+            _bda = max(0.0, _bda - dt * 0.5)
+        self._burn_dot_acc = _bda
+        self.burn_patches = [bp for bp in self.burn_patches if bp.alive]
+
+        # ── Fungal Matriarch passive spore aura ───────────────────────────────
+        _maa = getattr(self, "_mat_aura_acc", 0.0)
+        mat_overlap = any(
+            getattr(e, "_spore_cloud_passive", False)
+            and e.alive
+            and (self.player.x - e.x) ** 2 + (self.player.y - e.y) ** 2 < 80**2
+            for e in self.enemies
+        )
+        if mat_overlap:
+            _maa += dt * 0.5
+            if _maa >= 1.0:
+                _maa -= 1.0
+                if self.player.take_damage(1):
+                    self.particles.emit_player_hurt(self.player.x, self.player.y)
+                    self.camera.add_shake(3)
+        else:
+            _maa = max(0.0, _maa - dt * 0.3)
+        self._mat_aura_acc = _maa
+
+        # ── Arena clear check ─────────────────────────────────────────────────
+        if not self.enemies:
+            self.state = "ARENA_WIN"
 
     # ── Relic selection ───────────────────────────────────────────────────────
     def _start_relic_selection(self) -> None:
@@ -728,13 +1301,19 @@ class Game:
         """Generate shop items on first entry, then switch to SHOP state."""
         if not dr.shop_items:
             fl = min(self.dungeon.floor, 7) - 1  # 0-based index
-            hp_price   = C.SHOP_HP_PRICE[fl]
+            hp_price = C.SHOP_HP_PRICE[fl]
             perk_price = C.SHOP_PERK_PRICE[fl]
             # Slot 0: HP vial (once per floor)
             dr.shop_items.append(
-                {"kind": "hp", "cost": hp_price, "label": "Heart Vial",
-                 "desc": "Restore 1 HP.", "icon": "♥", "icon_id": "heart_vial",
-                 "bought": False}
+                {
+                    "kind": "hp",
+                    "cost": hp_price,
+                    "label": "Heart Vial",
+                    "desc": "Restore 1 HP.",
+                    "icon": "♥",
+                    "icon_id": "heart_vial",
+                    "bought": False,
+                }
             )
             # Slot 1: one random perk
             chosen = random.sample(_available_perks(self.player), 1)
@@ -822,8 +1401,8 @@ class Game:
 
     # ── Update ────────────────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
-        if self.state in ("MENU", "PAUSED", "CODEX"):
-            return  # PAUSED/CODEX freeze everything; MENU has nothing to tick
+        if self.state in ("MENU", "PAUSED", "CODEX", "ARENA_SELECT"):
+            return  # these states freeze all game logic
         self.camera.update(dt)
         if self._show_staircase:
             self._staircase_t += dt
@@ -834,7 +1413,9 @@ class Game:
             self._update_floor_clear(dt)
         elif self.state == "TRANSITIONING":
             self._update_transitioning(dt)
-        # UPGRADE, DEAD: gameplay frozen — particles still tick (ambient feel)
+        elif self.state == "ARENA":
+            self._update_arena(dt)
+        # UPGRADE, DEAD, ARENA_WIN, ARENA_DEAD: gameplay frozen — particles still tick
         self.particles.update(dt)
 
     def _update_playing(self, dt: float) -> None:
@@ -1143,7 +1724,7 @@ class Game:
         _mat_overlap = False
         for e in self.enemies:
             if getattr(e, "_spore_cloud_passive", False) and e.alive:
-                if (self.player.x - e.x) ** 2 + (self.player.y - e.y) ** 2 < 80 ** 2:
+                if (self.player.x - e.x) ** 2 + (self.player.y - e.y) ** 2 < 80**2:
                     _mat_overlap = True
                 break
         if _mat_overlap:
@@ -1359,11 +1940,17 @@ class Game:
         self.screen.fill(C.C_BG)
 
         if self.state == "MENU":
-            ui.draw_menu(self.screen, self._highscore)
+            ui.draw_menu(self.screen, self._highscore, hovered=self._menu_hovered)
             return
 
         if self.state == "CODEX":
             ui.draw_codex(self.screen, self._codex_tab, self._codex_scroll)
+            return
+
+        if self.state == "ARENA_SELECT":
+            ui.draw_arena_select(
+                self.screen, _ARENA_ENTRIES, self._arena_selected, self._arena_count, focus=self._arena_focus
+            )
             return
 
         if self.state == "TRANSITIONING":
@@ -1371,8 +1958,10 @@ class Game:
         else:
             self._draw_playing()
 
-        # Boss HP bar — shown at top of playfield during the boss fight
-        if self.state == "PLAYING" and self._dr.is_boss:
+        # ── Boss HP bar ───────────────────────────────────────────────────────
+        _arena_states = ("ARENA", "ARENA_WIN", "ARENA_DEAD")
+        show_boss_hp = (self.state == "PLAYING" and self._dr.is_boss) or self.state in _arena_states
+        if show_boss_hp:
             boss_e = next(
                 (e for e in self.enemies if getattr(e, "is_boss_enemy", False)),
                 None,
@@ -1386,16 +1975,31 @@ class Game:
                     phase2=getattr(boss_e, "_phase2", False),
                 )
 
-        ui.draw_hud(
-            self.screen,
-            self.player,
-            floor_num=self.dungeon.floor,
-            room_num=self.room_num,
-            enemies_left=len(self.enemies),
-            debug=config.DEBUG,
-        )
-        ui.draw_minimap(self.screen, self.dungeon)
+        # ── HUD ───────────────────────────────────────────────────────────────
+        if self.state in _arena_states:
+            entry = _ARENA_ENTRIES[self._arena_selected]
+            label = f"⚔ {entry['name']} ×{self._arena_count}"
+            ui.draw_hud(
+                self.screen,
+                self.player,
+                enemies_left=len(self.enemies),
+                mode_label=label,
+            )
+        else:
+            ui.draw_hud(
+                self.screen,
+                self.player,
+                floor_num=self.dungeon.floor,
+                room_num=self.room_num,
+                enemies_left=len(self.enemies),
+                debug=config.DEBUG,
+            )
 
+        # ── Minimap (not shown in arena) ──────────────────────────────────────
+        if self.state not in _arena_states:
+            ui.draw_minimap(self.screen, self.dungeon)
+
+        # ── State-specific overlays ───────────────────────────────────────────
         if self.state == "DEAD":
             ui.draw_death_screen(self.screen, self._run_stats, self._new_highscore, self._highscore)
         elif self.state == "VICTORY":
@@ -1408,6 +2012,14 @@ class Game:
             ui.draw_relic_screen(self.screen, self._relic_choices, self._relic_hovered)
         elif self.state == "SHOP":
             ui.draw_shop_screen(self.screen, self._dr.shop_items, self.player, self._shop_hovered)
+        elif self.state in ("ARENA_WIN", "ARENA_DEAD"):
+            entry = _ARENA_ENTRIES[self._arena_selected]
+            ui.draw_arena_result(
+                self.screen,
+                won=(self.state == "ARENA_WIN"),
+                enemy_name=entry["name"],
+                count=self._arena_count,
+            )
         elif self.state == "PAUSED":
             # Re-draw whichever overlay was active before pausing, then the pause screen on top
             if self._pre_pause_state == "UPGRADE":
@@ -1460,7 +2072,9 @@ class Game:
         for chest in self.chests:
             chest.draw(self.screen, cam)
         if self._show_staircase and dr.is_boss:
-            ui.draw_staircase(self.screen, cam, self._staircase_x, self._staircase_y, self._staircase_t, self._ladder_ready)
+            ui.draw_staircase(
+                self.screen, cam, self._staircase_x, self._staircase_y, self._staircase_t, self._ladder_ready
+            )
         for e in self.enemies:
             e.draw(self.screen, cam)
         for ep in self.enemy_projectiles:

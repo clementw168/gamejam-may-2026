@@ -1,18 +1,21 @@
 """HUD — hearts, coin counter, floor info, death/upgrade overlays."""
 
 from __future__ import annotations
+
 import math
+from typing import TYPE_CHECKING, Any
+
 import pygame
+
 from gamejam_may_2026 import constants as C
 from gamejam_may_2026 import icons
 
-from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
-    from gamejam_may_2026.player import Player
+    from gamejam_may_2026.camera import Camera
     from gamejam_may_2026.dungeon import Dungeon
     from gamejam_may_2026.perks import Perk
+    from gamejam_may_2026.player import Player
     from gamejam_may_2026.relics import Relic
-    from gamejam_may_2026.camera import Camera
 
 # ── Font cache ────────────────────────────────────────────────────────────────
 _fonts: dict[tuple, pygame.font.Font] = {}
@@ -43,6 +46,7 @@ def draw_hud(
     room_num: int = 1,
     enemies_left: int = 0,
     debug: bool = False,
+    mode_label: str = "",
 ) -> None:
     # Background strip
     hud_y = C.PLAYFIELD_H
@@ -71,21 +75,24 @@ def draw_hud(
         label = _font(18).render(f"! {enemies_left}", True, (200, 80, 80))
         surf.blit(label, (C.SCREEN_W // 2 - label.get_width() // 2, cy - 10))
 
-    # ── Floor / room ──────────────────────────────────────────────────────────
-    floor_label = _font(20, bold=True).render(f"Floor {floor_num}", True, (165, 148, 125))
-    room_label = _font(15).render(f"Room {room_num}", True, (105, 92, 80))
-    surf.blit(floor_label, (C.SCREEN_W - 140, hud_y + 12))
-    surf.blit(room_label, (C.SCREEN_W - 120, hud_y + 38))
+    # ── Floor / room  or  custom mode label ───────────────────────────────────
+    if mode_label:
+        ml = _font(19, bold=True).render(mode_label, True, (190, 150, 255))
+        surf.blit(ml, (C.SCREEN_W - ml.get_width() - 12, hud_y + 22))
+    else:
+        floor_label = _font(20, bold=True).render(f"Floor {floor_num}", True, (165, 148, 125))
+        room_label = _font(15).render(f"Room {room_num}", True, (105, 92, 80))
+        surf.blit(floor_label, (C.SCREEN_W - 140, hud_y + 12))
+        surf.blit(room_label, (C.SCREEN_W - 120, hud_y + 38))
 
     # ── Relic icon strip (small icons left-aligned, second row) ──────────────
-    relics = getattr(player, 'relics', [])
+    relics = getattr(player, "relics", [])
     if relics:
         icon_size = 16
         rx = 12
-        iy = hud_y + 58 + icon_size // 2   # vertical centre of icon row
+        iy = hud_y + 58 + icon_size // 2  # vertical centre of icon row
         for relic in relics:
-            icons.draw(surf, rx + icon_size // 2, iy,
-                       icon_size, relic.id, (195, 175, 255))
+            icons.draw(surf, rx + icon_size // 2, iy, icon_size, relic.id, (195, 175, 255))
             rx += icon_size + 4
 
     # ── Dash cooldown hint ────────────────────────────────────────────────────
@@ -99,6 +106,7 @@ def draw_hud(
 
 
 # ── Shared stat-block helper ──────────────────────────────────────────────────
+
 
 def _fmt_time(seconds: float) -> str:
     m = int(seconds) // 60
@@ -121,7 +129,7 @@ def _draw_run_stats(
         f"Time:             {_fmt_time(stats.get('time', 0.0))}",
     ]
     fnt = _font(22)
-    lh  = 32
+    lh = 32
     for i, line in enumerate(lines):
         s = fnt.render(line, True, color)
         surf.blit(s, (cx - s.get_width() // 2, top_y + i * lh))
@@ -173,8 +181,8 @@ def draw_death_screen(
 # ── Upgrade selection overlay ─────────────────────────────────────────────────
 
 # Card geometry — kept in sync with game.py's _upgrade_card_rect()
-UPGRADE_CARD_W   = 280
-UPGRADE_CARD_H   = 200
+UPGRADE_CARD_W = 280
+UPGRADE_CARD_H = 200
 UPGRADE_CARD_GAP = 30
 
 
@@ -182,7 +190,7 @@ def _upgrade_card_rect(idx: int) -> pygame.Rect:
     """Return the screen rect for upgrade card *idx* (0, 1, 2)."""
     total_w = 3 * UPGRADE_CARD_W + 2 * UPGRADE_CARD_GAP
     start_x = (C.SCREEN_W - total_w) // 2
-    card_y  = C.PLAYFIELD_H // 2 - UPGRADE_CARD_H // 2
+    card_y = C.PLAYFIELD_H // 2 - UPGRADE_CARD_H // 2
     return pygame.Rect(
         start_x + idx * (UPGRADE_CARD_W + UPGRADE_CARD_GAP),
         card_y,
@@ -201,9 +209,9 @@ def _draw_wrapped(
     color: tuple[int, int, int],
 ) -> None:
     """Render *text* word-wrapped inside *max_w* pixels."""
-    words  = text.split()
+    words = text.split()
     lines: list[str] = []
-    line:  list[str] = []
+    line: list[str] = []
     for word in words:
         test = " ".join(line + [word])
         if font.size(test)[0] <= max_w:
@@ -237,14 +245,14 @@ def draw_upgrade_screen(
 
     # Cards
     for i, perk in enumerate(perks):
-        rect    = _upgrade_card_rect(i)
-        is_hov  = (i == hovered)
+        rect = _upgrade_card_rect(i)
+        is_hov = i == hovered
 
-        bg_col     = (75, 58, 38) if is_hov else (42, 32, 20)
+        bg_col = (75, 58, 38) if is_hov else (42, 32, 20)
         border_col = (210, 180, 80) if is_hov else (95, 72, 48)
-        name_col   = (255, 240, 150) if is_hov else (230, 210, 165)
+        name_col = (255, 240, 150) if is_hov else (230, 210, 165)
 
-        pygame.draw.rect(surf, bg_col,     rect, border_radius=8)
+        pygame.draw.rect(surf, bg_col, rect, border_radius=8)
         pygame.draw.rect(surf, border_col, rect, 2, border_radius=8)
 
         # [1] / [2] / [3] shortcut label
@@ -253,21 +261,17 @@ def draw_upgrade_screen(
 
         # Icon
         icon_size = 28
-        icons.draw(surf, rect.right - icon_size // 2 - 10, rect.y + 8 + icon_size // 2,
-                   icon_size, perk.id, name_col)
+        icons.draw(surf, rect.right - icon_size // 2 - 10, rect.y + 8 + icon_size // 2, icon_size, perk.id, name_col)
 
         # Perk name
         name_surf = _font(23, bold=True).render(perk.name, True, name_col)
         surf.blit(name_surf, (rect.centerx - name_surf.get_width() // 2, rect.y + 42))
 
         # Divider line
-        pygame.draw.line(surf, border_col,
-                         (rect.x + 16, rect.y + 75), (rect.right - 16, rect.y + 75), 1)
+        pygame.draw.line(surf, border_col, (rect.x + 16, rect.y + 75), (rect.right - 16, rect.y + 75), 1)
 
         # Description (word-wrapped)
-        _draw_wrapped(surf, perk.desc, _font(16),
-                      rect.x + 16, rect.y + 84,
-                      rect.width - 32, (170, 155, 120))
+        _draw_wrapped(surf, perk.desc, _font(16), rect.x + 16, rect.y + 84, rect.width - 32, (170, 155, 120))
 
     # Footer hint
     hint = _font(17).render("Click a card  or press  1 / 2 / 3", True, (100, 90, 70))
@@ -277,11 +281,12 @@ def draw_upgrade_screen(
 
 # ── Relic selection overlay ──────────────────────────────────────────────────
 
+
 def _relic_card_rect(idx: int) -> pygame.Rect:
     """Return the screen rect for relic card *idx* (0 or 1) — 2 cards centred."""
     total_w = 2 * UPGRADE_CARD_W + UPGRADE_CARD_GAP
     start_x = (C.SCREEN_W - total_w) // 2
-    card_y  = C.PLAYFIELD_H // 2 - UPGRADE_CARD_H // 2
+    card_y = C.PLAYFIELD_H // 2 - UPGRADE_CARD_H // 2
     return pygame.Rect(
         start_x + idx * (UPGRADE_CARD_W + UPGRADE_CARD_GAP),
         card_y,
@@ -308,14 +313,14 @@ def draw_relic_screen(
     surf.blit(sub, (C.SCREEN_W // 2 - sub.get_width() // 2, title_y + 44))
 
     for i, relic in enumerate(relics):
-        rect   = _relic_card_rect(i)
-        is_hov = (i == hovered)
+        rect = _relic_card_rect(i)
+        is_hov = i == hovered
 
-        bg_col     = (55, 38, 80) if is_hov else (28, 18, 48)
+        bg_col = (55, 38, 80) if is_hov else (28, 18, 48)
         border_col = (200, 150, 255) if is_hov else (88, 60, 140)
-        name_col   = (240, 210, 255) if is_hov else (200, 170, 240)
+        name_col = (240, 210, 255) if is_hov else (200, 170, 240)
 
-        pygame.draw.rect(surf, bg_col,     rect, border_radius=8)
+        pygame.draw.rect(surf, bg_col, rect, border_radius=8)
         pygame.draw.rect(surf, border_col, rect, 2, border_radius=8)
 
         # [1] / [2] shortcut label
@@ -324,21 +329,17 @@ def draw_relic_screen(
 
         # Large icon
         icon_size = 36
-        icons.draw(surf, rect.centerx, rect.y + 20 + icon_size // 2,
-                   icon_size, relic.id, name_col)
+        icons.draw(surf, rect.centerx, rect.y + 20 + icon_size // 2, icon_size, relic.id, name_col)
 
         # Relic name
         name_surf = _font(23, bold=True).render(relic.name, True, name_col)
         surf.blit(name_surf, (rect.centerx - name_surf.get_width() // 2, rect.y + 76))
 
         # Divider
-        pygame.draw.line(surf, border_col,
-                         (rect.x + 16, rect.y + 108), (rect.right - 16, rect.y + 108), 1)
+        pygame.draw.line(surf, border_col, (rect.x + 16, rect.y + 108), (rect.right - 16, rect.y + 108), 1)
 
         # Description
-        _draw_wrapped(surf, relic.desc, _font(16),
-                      rect.x + 16, rect.y + 116,
-                      rect.width - 32, (165, 140, 215))
+        _draw_wrapped(surf, relic.desc, _font(16), rect.x + 16, rect.y + 116, rect.width - 32, (165, 140, 215))
 
     hint = _font(17).render("Click a card  or press  1 / 2", True, (90, 70, 130))
     hint_y = _relic_card_rect(0).bottom + 18
@@ -361,19 +362,19 @@ def draw_boss_gate_hint(
     anchored to the door the player just bumped.
     """
     # Alpha: quick fade-in, slow fade-out
-    fade_in  = min(1.0, t / 0.2)
+    fade_in = min(1.0, t / 0.2)
     fade_out = min(1.0, (2.5 - t) / 0.5) if t < 2.5 else 1.0
     # fade_out here: goes 0→1 as t goes 2.5→2.0, meaning starts fading at t=2.0
     # Reconsider: t counts DOWN from 2.5 to 0. "last 0.5 s" = t < 0.5.
-    fade_out = min(1.0, t / 0.5)   # 0→1 as t goes 0→0.5; full at t≥0.5
-    alpha    = int(fade_in * fade_out * 220)
+    fade_out = min(1.0, t / 0.5)  # 0→1 as t goes 0→0.5; full at t≥0.5
+    alpha = int(fade_in * fade_out * 220)
     if alpha <= 0:
         return
 
     label = _font(17, bold=True).render("[!]  Clear every room to open the gate", True, (220, 180, 75))
-    pad   = 7
-    w     = label.get_width() + pad * 2
-    h     = label.get_height() + pad * 2
+    pad = 7
+    w = label.get_width() + pad * 2
+    h = label.get_height() + pad * 2
 
     ts = C.TILE_SIZE
     # Position inside the room, just past the wall face so it's visible even
@@ -414,9 +415,9 @@ def draw_boss_hpbar(
     """Centred boss HP bar near the top of the playfield."""
     BAR_W = 380
     BAR_H = 14
-    cx    = C.SCREEN_W // 2
-    bx    = cx - BAR_W // 2
-    by    = 10
+    cx = C.SCREEN_W // 2
+    bx = cx - BAR_W // 2
+    by = 10
 
     # Name label
     label = _font(15, bold=True).render(name.upper(), True, (220, 190, 145))
@@ -441,12 +442,12 @@ def draw_boss_hpbar(
 # ── Minimap ───────────────────────────────────────────────────────────────────
 def draw_minimap(surf: pygame.Surface, dungeon: Dungeon) -> None:
     """Overlay a small room-grid in the top-right corner of the playfield."""
-    CW, CH = 20, 11     # cell width × height (2 : 1 matches room proportions)
-    GAP    = 2
+    CW, CH = 20, 11  # cell width × height (2 : 1 matches room proportions)
+    GAP = 2
     STRIDE_X = CW + GAP
     STRIDE_Y = CH + GAP
-    PAD    = 6           # padding inside the background rect
-    MARGIN = 8           # margin from screen edges
+    PAD = 6  # padding inside the background rect
+    MARGIN = 8  # margin from screen edges
 
     all_pos = list(dungeon.rooms.keys())
     if not all_pos:
@@ -498,7 +499,8 @@ def draw_minimap(surf: pygame.Surface, dungeon: Dungeon) -> None:
             x1, y1 = _cell_topleft(*pos)
             x2, y2 = _cell_topleft(*npos)
             pygame.draw.line(
-                surf, (85, 78, 58),
+                surf,
+                (85, 78, 58),
                 (x1 + CW // 2, y1 + CH // 2),
                 (x2 + CW // 2, y2 + CH // 2),
                 1,
@@ -509,25 +511,25 @@ def draw_minimap(surf: pygame.Surface, dungeon: Dungeon) -> None:
         if not dr.visited:
             continue
         cx, cy = _cell_topleft(*pos)
-        is_cur = (pos == cur_pos)
+        is_cur = pos == cur_pos
 
         if is_cur:
-            color  = (220, 190,  60)   # gold — current room
-            border = (255, 230,  90)
+            color = (220, 190, 60)  # gold — current room
+            border = (255, 230, 90)
         elif dr.is_boss:
-            color  = (130,  25,  25) if dr.cleared else (210,  45,  45)
-            border = ( 80,  20,  20) if dr.cleared else (255,  80,  80)
+            color = (130, 25, 25) if dr.cleared else (210, 45, 45)
+            border = (80, 20, 20) if dr.cleared else (255, 80, 80)
         elif dr.is_shop:
-            color  = ( 20, 120, 130) if dr.cleared else ( 30, 175, 190)
-            border = ( 15,  80,  90) if dr.cleared else ( 20, 130, 145)
+            color = (20, 120, 130) if dr.cleared else (30, 175, 190)
+            border = (15, 80, 90) if dr.cleared else (20, 130, 145)
         elif dr.cleared:
-            color  = ( 40,  90,  40)   # dim green — cleared
-            border = ( 30,  60,  30)
+            color = (40, 90, 40)  # dim green — cleared
+            border = (30, 60, 30)
         else:
-            color  = ( 70, 185,  70)   # bright green — uncleared visited
-            border = ( 50, 130,  50)
+            color = (70, 185, 70)  # bright green — uncleared visited
+            border = (50, 130, 50)
 
-        pygame.draw.rect(surf, color,  (cx, cy, CW, CH))
+        pygame.draw.rect(surf, color, (cx, cy, CW, CH))
         pygame.draw.rect(surf, border, (cx, cy, CW, CH), 1)
 
         # Mark start room with a small white dot
@@ -544,6 +546,7 @@ def draw_minimap(surf: pygame.Surface, dungeon: Dungeon) -> None:
 
 
 # ── Shop screen ───────────────────────────────────────────────────────────────
+
 
 def draw_shop_screen(
     surf: pygame.Surface,
@@ -567,26 +570,34 @@ def draw_shop_screen(
     surf.blit(bal, (C.SCREEN_W // 2 - bal.get_width() // 2, title_y + 42))
 
     for i, item in enumerate(items[:3]):
-        rect   = _upgrade_card_rect(i)
+        rect = _upgrade_card_rect(i)
         bought = item.get("bought", False)
-        cost   = item["cost"]
+        cost = item["cost"]
         # HP item: "bought" when HP is full
         if item["kind"] == "hp":
-            bought = (player.hp >= player.max_hp)
+            bought = player.hp >= player.max_hp
 
         can_afford = player.coins >= cost and not bought
-        is_hov     = (i == hovered) and can_afford
+        is_hov = (i == hovered) and can_afford
 
         if bought:
-            bg_col = (28, 28, 28); border_col = (60, 60, 60); name_col = (80, 80, 80)
+            bg_col = (28, 28, 28)
+            border_col = (60, 60, 60)
+            name_col = (80, 80, 80)
         elif not can_afford:
-            bg_col = (35, 28, 20); border_col = (70, 55, 38); name_col = (120, 100, 75)
+            bg_col = (35, 28, 20)
+            border_col = (70, 55, 38)
+            name_col = (120, 100, 75)
         elif is_hov:
-            bg_col = (25, 80, 90); border_col = (50, 190, 210); name_col = (160, 240, 250)
+            bg_col = (25, 80, 90)
+            border_col = (50, 190, 210)
+            name_col = (160, 240, 250)
         else:
-            bg_col = (20, 50, 60); border_col = (40, 130, 145); name_col = (120, 200, 215)
+            bg_col = (20, 50, 60)
+            border_col = (40, 130, 145)
+            name_col = (120, 200, 215)
 
-        pygame.draw.rect(surf, bg_col,     rect, border_radius=8)
+        pygame.draw.rect(surf, bg_col, rect, border_radius=8)
         pygame.draw.rect(surf, border_col, rect, 2, border_radius=8)
 
         # Shortcut label
@@ -608,111 +619,148 @@ def draw_shop_screen(
 
         # Icon
         icon_size = 28
-        icons.draw(surf, rect.centerx, rect.y + 38 + icon_size // 2,
-                   icon_size, item.get("icon_id", "heart_vial"), name_col)
+        icons.draw(
+            surf, rect.centerx, rect.y + 38 + icon_size // 2, icon_size, item.get("icon_id", "heart_vial"), name_col
+        )
 
         # Name
         name_surf = _font(21, bold=True).render(item["label"], True, name_col)
         surf.blit(name_surf, (rect.centerx - name_surf.get_width() // 2, rect.y + 78))
 
         # Divider
-        pygame.draw.line(surf, border_col,
-                         (rect.x + 16, rect.y + 108), (rect.right - 16, rect.y + 108), 1)
+        pygame.draw.line(surf, border_col, (rect.x + 16, rect.y + 108), (rect.right - 16, rect.y + 108), 1)
 
         # Description
-        _draw_wrapped(surf, item["desc"], _font(15),
-                      rect.x + 16, rect.y + 116, rect.width - 32,
-                      (130, 160, 165) if not bought else (65, 65, 65))
+        _draw_wrapped(
+            surf,
+            item["desc"],
+            _font(15),
+            rect.x + 16,
+            rect.y + 116,
+            rect.width - 32,
+            (130, 160, 165) if not bought else (65, 65, 65),
+        )
 
-    hint = _font(17).render(
-        "1 / 2 / 3 to buy  ·  Space or Esc to leave", True, (70, 110, 120))
+    hint = _font(17).render("1 / 2 / 3 to buy  ·  Space or Esc to leave", True, (70, 110, 120))
     hint_y = _upgrade_card_rect(0).bottom + 18
     surf.blit(hint, (C.SCREEN_W // 2 - hint.get_width() // 2, hint_y))
 
 
 # ── Main menu ─────────────────────────────────────────────────────────────────
 
-def draw_menu(surf: pygame.Surface, highscore: dict) -> None:
-    """Title / main-menu screen."""
-    surf.fill(C.C_BG)
+_MENU_BTN_W = 360
+_MENU_BTN_H = 64
+_MENU_BTN_GAP = 16
 
+# Colours per button index: (normal_bg, hover_bg, normal_bd, hover_bd, normal_lbl, hover_lbl)
+_MENU_BTN_STYLES = [
+    # Dungeon Mode — forest green
+    ((28, 52, 22), (52, 96, 40), (58, 128, 48), (100, 220, 80), (145, 210, 125), (220, 255, 195)),
+    # Arena Mode — purple
+    ((35, 18, 58), (68, 28, 110), (88, 42, 150), (180, 100, 255), (165, 120, 230), (220, 175, 255)),
+    # Codex — amber
+    ((44, 34, 12), (80, 60, 18), (110, 80, 28), (200, 155, 55), (185, 155, 90), (240, 210, 120)),
+]
+_MENU_BTN_LABELS = ["Dungeon Mode", "Arena Mode", "Codex"]
+_MENU_BTN_SUBLABELS = ["7-floor roguelite run", "1v1 practice fights", "View enemies & relics"]
+
+
+def _menu_button_rects() -> list[pygame.Rect]:
+    """Return the three main-menu button rects (Dungeon, Arena, Codex)."""
+    total_h = 3 * _MENU_BTN_H + 2 * _MENU_BTN_GAP
+    top = C.SCREEN_H // 2 - total_h // 2 + 30  # slight downward nudge from centre
+    bx = C.SCREEN_W // 2 - _MENU_BTN_W // 2
+    return [pygame.Rect(bx, top + i * (_MENU_BTN_H + _MENU_BTN_GAP), _MENU_BTN_W, _MENU_BTN_H) for i in range(3)]
+
+
+def menu_button_at(mx: int, my: int) -> int:
+    """Return 0/1/2 if (mx, my) hits that button, else -1."""
+    for i, r in enumerate(_menu_button_rects()):
+        if r.collidepoint(mx, my):
+            return i
+    return -1
+
+
+def draw_menu(surf: pygame.Surface, highscore: dict, hovered: int = -1) -> None:
+    """Title / main-menu screen with three navigation buttons."""
+    surf.fill(C.C_BG)
     cx = C.SCREEN_W // 2
 
-    # ── Decorative vine border lines ─────────────────────────────────────────
+    # ── Decorative vine borders ───────────────────────────────────────────────
     border_col = (35, 65, 25)
-    pygame.draw.line(surf, border_col, (0, 4),            (C.SCREEN_W, 4),            3)
-    pygame.draw.line(surf, border_col, (0, C.SCREEN_H-5), (C.SCREEN_W, C.SCREEN_H-5), 3)
+    pygame.draw.line(surf, border_col, (0, 4), (C.SCREEN_W, 4), 3)
+    pygame.draw.line(surf, border_col, (0, C.SCREEN_H - 5), (C.SCREEN_W, C.SCREEN_H - 5), 3)
 
     # ── Title ─────────────────────────────────────────────────────────────────
-    title = _font(82, bold=True).render("VERDANT DEPTHS", True, (95, 195, 90))
-    # Slight drop-shadow in a darker green
-    shadow = _font(82, bold=True).render("VERDANT DEPTHS", True, (30, 70, 25))
-    ty = 100
+    title = _font(80, bold=True).render("VERDANT DEPTHS", True, (95, 195, 90))
+    shadow = _font(80, bold=True).render("VERDANT DEPTHS", True, (30, 70, 25))
+    ty = 62
     surf.blit(shadow, (cx - shadow.get_width() // 2 + 3, ty + 3))
-    surf.blit(title,  (cx - title.get_width()  // 2,     ty))
+    surf.blit(title, (cx - title.get_width() // 2, ty))
 
-    # Subtitle tagline
-    tag = _font(20).render(
-        "A forest-ruins roguelite  ·  7 floors  ·  6 bosses", True, (60, 115, 55))
-    surf.blit(tag, (cx - tag.get_width() // 2, ty + 100))
+    tag = _font(18).render("A forest-ruins roguelite  ·  7 floors  ·  6 bosses", True, (55, 110, 50))
+    surf.blit(tag, (cx - tag.get_width() // 2, ty + 92))
 
-    # ── "Press any key" prompt ────────────────────────────────────────────────
-    prompt = _font(30, bold=True).render("— Press any key to begin —", True, (145, 210, 130))
-    surf.blit(prompt, (cx - prompt.get_width() // 2, 250))
+    # ── Navigation buttons ────────────────────────────────────────────────────
+    rects = _menu_button_rects()
+    for i, rect in enumerate(rects):
+        is_hov = i == hovered
+        nbg, hbg, nbd, hbd, nlbl, hlbl = _MENU_BTN_STYLES[i]
+        bg_col = hbg if is_hov else nbg
+        bd_col = hbd if is_hov else nbd
+        lbl_col = hlbl if is_hov else nlbl
 
-    # ── Controls table ────────────────────────────────────────────────────────
-    ctrl_y   = 320
-    ctrl_fnt = _font(17)
-    key_col  = (130, 185, 120)
-    val_col  = (80, 125, 70)
+        pygame.draw.rect(surf, bg_col, rect, border_radius=8)
+        pygame.draw.rect(surf, bd_col, rect, 2, border_radius=8)
+
+        label = _font(26, bold=True).render(_MENU_BTN_LABELS[i], True, lbl_col)
+        surf.blit(label, (rect.centerx - label.get_width() // 2, rect.y + 10))
+
+        sub = _font(14).render(_MENU_BTN_SUBLABELS[i], True, (180, 160, 100) if is_hov else (100, 88, 58))
+        surf.blit(sub, (rect.centerx - sub.get_width() // 2, rect.y + 38))
+
+    # ── Quick controls strip ──────────────────────────────────────────────────
+    ctrl_y = rects[-1].bottom + 26
+    ctrl_fnt = _font(15)
     controls = [
-        ("Move",  "ZQSD / WASD / Arrows"),
-        ("Aim",   "Mouse"),
+        ("Move", "ZQSD / WASD / Arrows"),
         ("Shoot", "Left Click"),
-        ("Dash",  "Space  (i-frames + cooldown arc)"),
-        ("Buy",   "1 / 2 / 3  in shops & upgrades"),
-        ("Quit",  "Esc"),
+        ("Dash", "Space"),
+        ("Quit", "Esc"),
     ]
-    col_gap  = 20
-    key_w    = max(ctrl_fnt.size(k + ":")[0] for k, _ in controls)
-    lh       = 26
-    for i, (key, val) in enumerate(controls):
-        y     = ctrl_y + i * lh
-        k_s   = ctrl_fnt.render(key + ":", True, key_col)
-        v_s   = ctrl_fnt.render(val, True, val_col)
-        left  = cx - (key_w + col_gap + v_s.get_width()) // 2
-        surf.blit(k_s, (left + key_w - k_s.get_width(), y))
-        surf.blit(v_s, (left + key_w + col_gap,         y))
+    parts: list[str] = []
+    for key, val in controls:
+        parts.append(f"{key}: {val}")
+    ctrl_str = "   ·   ".join(parts)
+    ctrl_s = ctrl_fnt.render(ctrl_str, True, (65, 100, 55))
+    surf.blit(ctrl_s, (cx - ctrl_s.get_width() // 2, ctrl_y))
 
     # ── Best run ──────────────────────────────────────────────────────────────
-    best_top = ctrl_y + len(controls) * lh + 30
+    best_top = ctrl_y + 34
     if highscore.get("floors", 0) > 0:
-        bt = _font(18, bold=True).render("BEST RUN", True, (200, 175, 60))
+        bt = _font(16, bold=True).render("BEST RUN", True, (200, 175, 60))
         surf.blit(bt, (cx - bt.get_width() // 2, best_top))
-        bi = _font(16).render(
+        bi = _font(15).render(
             f"Floor {highscore['floors']} / 7  ·  "
             f"{highscore['rooms']} rooms  ·  "
             f"{highscore['coins']} coins  ·  "
             f"{_fmt_time(highscore.get('time', 0.0))}",
-            True, (165, 145, 75),
+            True,
+            (165, 145, 75),
         )
-        surf.blit(bi, (cx - bi.get_width() // 2, best_top + 26))
+        surf.blit(bi, (cx - bi.get_width() // 2, best_top + 22))
     else:
-        no_hs = _font(16).render("No runs yet — be the first!", True, (65, 100, 55))
+        no_hs = _font(15).render("No runs yet — be the first!", True, (65, 100, 55))
         surf.blit(no_hs, (cx - no_hs.get_width() // 2, best_top + 4))
-
-    # Codex hint (bottom-right corner)
-    codex_hint = _font(16).render("[C]  View Codex", True, (55, 100, 50))
-    surf.blit(codex_hint, (C.SCREEN_W - codex_hint.get_width() - 16,
-                            C.SCREEN_H - codex_hint.get_height() - 10))
 
 
 # ── Floor-clear overlay ───────────────────────────────────────────────────────
 
+
 def draw_floor_clear(surf: pygame.Surface, floor: int) -> None:
     """Shown after the boss is defeated.  The staircase is visible behind."""
     overlay = pygame.Surface((C.SCREEN_W, C.SCREEN_H), pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 155))   # slightly lighter so staircase glow shows through
+    overlay.fill((0, 0, 0, 155))  # slightly lighter so staircase glow shows through
     surf.blit(overlay, (0, 0))
 
     cx = C.SCREEN_W // 2
@@ -732,6 +780,7 @@ def draw_floor_clear(surf: pygame.Surface, floor: int) -> None:
 
 
 # ── Victory screen ────────────────────────────────────────────────────────────
+
 
 def draw_victory(
     surf: pygame.Surface,
@@ -768,6 +817,7 @@ def draw_victory(
 
 # ── Descent staircase (drawn in boss room after floor clear) ──────────────────
 
+
 def draw_staircase(
     surf: pygame.Surface,
     camera: Camera,
@@ -788,31 +838,29 @@ def draw_staircase(
     surf.blit(glow, (sx - gr, sy - gr))
 
     # Dark pit opening beneath the steps
-    pygame.draw.ellipse(surf, (5, 4, 2),  (sx - 22, sy - 5, 44, 22))
+    pygame.draw.ellipse(surf, (5, 4, 2), (sx - 22, sy - 5, 44, 22))
     pygame.draw.ellipse(surf, (12, 10, 6), (sx - 16, sy - 3, 32, 14))
 
     # Four stone steps narrowing with depth
     steps = [
-        (44, 8,  0,  (86, 68, 48)),
-        (32, 7,  7,  (74, 58, 40)),
-        (22, 6, 13,  (62, 48, 32)),
-        (14, 5, 18,  (50, 40, 26)),
+        (44, 8, 0, (86, 68, 48)),
+        (32, 7, 7, (74, 58, 40)),
+        (22, 6, 13, (62, 48, 32)),
+        (14, 5, 18, (50, 40, 26)),
     ]
     base_y = sy - 20
     for w, h, yoff, col in steps:
         rx = sx - w // 2
         ry = base_y + yoff
         # shadow
-        pygame.draw.rect(surf, (col[0] // 3, col[1] // 3, col[2] // 3),
-                         (rx + 2, ry + 2, w, h))
+        pygame.draw.rect(surf, (col[0] // 3, col[1] // 3, col[2] // 3), (rx + 2, ry + 2, w, h))
         # step face
         pygame.draw.rect(surf, col, (rx, ry, w, h))
         # top-edge highlight
         hi = (min(255, col[0] + 26), min(255, col[1] + 20), min(255, col[2] + 14))
         pygame.draw.line(surf, hi, (rx, ry), (rx + w - 1, ry), 1)
         # moss streak
-        pygame.draw.line(surf, (38, 88, 28),
-                         (rx, ry + h - 2), (rx + w // 3, ry + h - 2), 1)
+        pygame.draw.line(surf, (38, 88, 28), (rx, ry + h - 2), (rx + w // 3, ry + h - 2), 1)
 
     # Small label — "Descend" when ready, otherwise "Pick a relic first"
     if ready:
@@ -838,9 +886,7 @@ def pause_button_rects() -> tuple[pygame.Rect, pygame.Rect]:
     cy = C.SCREEN_H // 2
     top = cy + 10
     resume = pygame.Rect(cx - _PAUSE_BTN_W // 2, top, _PAUSE_BTN_W, _PAUSE_BTN_H)
-    menu   = pygame.Rect(cx - _PAUSE_BTN_W // 2,
-                         top + _PAUSE_BTN_H + _PAUSE_BTN_GAP,
-                         _PAUSE_BTN_W, _PAUSE_BTN_H)
+    menu = pygame.Rect(cx - _PAUSE_BTN_W // 2, top + _PAUSE_BTN_H + _PAUSE_BTN_GAP, _PAUSE_BTN_W, _PAUSE_BTN_H)
     return resume, menu
 
 
@@ -865,17 +911,16 @@ def draw_pause_screen(surf: pygame.Surface) -> None:
     mx, my = pygame.mouse.get_pos()
 
     for rect, label, hov in [
-        (resume_rect, "Resume",    resume_rect.collidepoint(mx, my)),
-        (menu_rect,   "Main Menu", menu_rect.collidepoint(mx, my)),
+        (resume_rect, "Resume", resume_rect.collidepoint(mx, my)),
+        (menu_rect, "Main Menu", menu_rect.collidepoint(mx, my)),
     ]:
-        bg  = (72, 58, 36) if hov else (42, 33, 20)
-        bd  = (200, 170, 72) if hov else (88, 70, 42)
-        lc  = (255, 232, 130) if hov else (208, 188, 136)
+        bg = (72, 58, 36) if hov else (42, 33, 20)
+        bd = (200, 170, 72) if hov else (88, 70, 42)
+        lc = (255, 232, 130) if hov else (208, 188, 136)
         pygame.draw.rect(surf, bg, rect, border_radius=6)
         pygame.draw.rect(surf, bd, rect, 2, border_radius=6)
         lbl = _font(24, bold=True).render(label, True, lc)
-        surf.blit(lbl, (rect.centerx - lbl.get_width() // 2,
-                        rect.centery - lbl.get_height() // 2))
+        surf.blit(lbl, (rect.centerx - lbl.get_width() // 2, rect.centery - lbl.get_height() // 2))
 
 
 # ── Codex screen ──────────────────────────────────────────────────────────────
@@ -897,44 +942,92 @@ def _get_codex_enemies() -> tuple[list, list]:
     from gamejam_may_2026 import enemies as E  # type: ignore
 
     _CODEX_REGULAR = [
-        (E.GoblinRunner,  {},              "Goblin Runner",   "F1+",
-         "Relentless wall-aware chaser. Deals contact damage. Gains speed each floor."),
-        (E.GoblinArcher,  {},              "Goblin Archer",   "F1+",
-         "Keeps its distance and fires aimed arrows with a wind-up telegraph."),
-        (E.Wolf,          {},              "Wolf",            "F1+",
-         "Wobbling flanker that lunges at high speed when close. Deals contact damage."),
-        (E.SporePlant,    {},              "Spore Plant",     "F1+",
-         "Stationary. Alternates 4-way spore volleys at 0° and 45°."),
-        (E.StoneCrawler,  {},              "Stone Crawler",   "F4+",
-         "Armoured melee foe. First 3 hits deflected; deals 2 damage on contact."),
-        (E.VenomfangBat,  {},              "Venomfang Bat",   "F4+",
-         "Fast erratic flier with arc-wobble movement. Deals contact damage."),
-        (E.CrystalTurret, {},              "Crystal Turret",  "F5+",
-         "Stationary rotating turret. Immune front ±60°; takes ×2 from behind."),
-        (E.SporeElder,    {},              "Spore Elder",     "F5+ elite",
-         "Elite plant. Fires 8-way volleys and periodic 6-spore clouds."),
-        (E.ShadowWraith,  {},              "Shadow Wraith",   "F5+",
-         "Teleports every 4 s. Fires pairs of homing projectiles."),
-        (E.BoneArcher,    {},              "Bone Archer",     "F6+",
-         "3-way spread shots; every 4th shot is a slow heavy bone spike."),
-        (E.MagmaSlug,     {},              "Magma Slug",      "F6+",
-         "Slow armoured chaser. Leaves burn patches; deals 2 contact damage."),
-        (E.VoidShrieker,  {},              "Void Shrieker",   "F7",
-         "Fast erratic screamer. Explodes into an 8-way projectile ring on death."),
+        (
+            E.GoblinRunner,
+            {},
+            "Goblin Runner",
+            "F1+",
+            "Relentless wall-aware chaser. Deals contact damage. Gains speed each floor.",
+        ),
+        (
+            E.GoblinArcher,
+            {},
+            "Goblin Archer",
+            "F1+",
+            "Keeps its distance and fires aimed arrows with a wind-up telegraph.",
+        ),
+        (E.Wolf, {}, "Wolf", "F1+", "Wobbling flanker that lunges at high speed when close. Deals contact damage."),
+        (E.SporePlant, {}, "Spore Plant", "F1+", "Stationary. Alternates 4-way spore volleys at 0° and 45°."),
+        (
+            E.StoneCrawler,
+            {},
+            "Stone Crawler",
+            "F4+",
+            "Armoured melee foe. First 3 hits deflected; deals 2 damage on contact.",
+        ),
+        (
+            E.VenomfangBat,
+            {},
+            "Venomfang Bat",
+            "F4+",
+            "Fast erratic flier with arc-wobble movement. Deals contact damage.",
+        ),
+        (
+            E.CrystalTurret,
+            {},
+            "Crystal Turret",
+            "F5+",
+            "Stationary rotating turret. Immune front ±60°; takes ×2 from behind.",
+        ),
+        (E.SporeElder, {}, "Spore Elder", "F5+ elite", "Elite plant. Fires 8-way volleys and periodic 6-spore clouds."),
+        (E.ShadowWraith, {}, "Shadow Wraith", "F5+", "Teleports every 4 s. Fires pairs of homing projectiles."),
+        (E.BoneArcher, {}, "Bone Archer", "F6+", "3-way spread shots; every 4th shot is a slow heavy bone spike."),
+        (E.MagmaSlug, {}, "Magma Slug", "F6+", "Slow armoured chaser. Leaves burn patches; deals 2 contact damage."),
+        (
+            E.VoidShrieker,
+            {},
+            "Void Shrieker",
+            "F7",
+            "Fast erratic screamer. Explodes into an 8-way projectile ring on death.",
+        ),
     ]
     _CODEX_BOSSES = [
-        (E.GoblinShaman,    {"floor": 1},  "Goblin Shaman",   "F1–2",
-         "Fires magic bolt bursts and summons Runners. P2: wider burst + pulsing aura."),
-        (E.AncientTree,     {},            "Ancient Tree",    "F3",
-         "Stationary. Alternating root bursts and fast thorn rings. Grows deadlier in P2."),
-        (E.IronWarden,      {},            "Iron Warden",     "F4",
-         "Armoured knight. Stomp AoE, shrapnel burst, P2 charge dash."),
-        (E.AbyssalLeech,    {},            "Abyssal Leech",   "F5",
-         "Fires healing tendrils and burst volleys. Moves and doubles tendrils in P2."),
-        (E.FungalMatriarch, {},            "Fungal Matriarch","F6",
-         "Spore volleys + SporeElder summons. Passive HP aura. Faster fire in P2."),
-        (E.VoidSovereign,   {},            "Void Sovereign",  "F7",
-         "Orbiting caster. Summons Wraiths. P2: 8-way burst, Shriekers, arena shrinks."),
+        (
+            E.GoblinShaman,
+            {"floor": 1},
+            "Goblin Shaman",
+            "F1–2",
+            "Fires magic bolt bursts and summons Runners. P2: wider burst + pulsing aura.",
+        ),
+        (
+            E.AncientTree,
+            {},
+            "Ancient Tree",
+            "F3",
+            "Stationary. Alternating root bursts and fast thorn rings. Grows deadlier in P2.",
+        ),
+        (E.IronWarden, {}, "Iron Warden", "F4", "Armoured knight. Stomp AoE, shrapnel burst, P2 charge dash."),
+        (
+            E.AbyssalLeech,
+            {},
+            "Abyssal Leech",
+            "F5",
+            "Fires healing tendrils and burst volleys. Moves and doubles tendrils in P2.",
+        ),
+        (
+            E.FungalMatriarch,
+            {},
+            "Fungal Matriarch",
+            "F6",
+            "Spore volleys + SporeElder summons. Passive HP aura. Faster fire in P2.",
+        ),
+        (
+            E.VoidSovereign,
+            {},
+            "Void Sovereign",
+            "F7",
+            "Orbiting caster. Summons Wraiths. P2: 8-way burst, Shriekers, arena shrinks.",
+        ),
     ]
     return _CODEX_REGULAR, _CODEX_BOSSES
 
@@ -976,14 +1069,14 @@ def _codex_enemy_sprite(
 
 def draw_codex(surf: pygame.Surface, tab: int, scroll: int = 0) -> None:
     """Full-screen Codex — enemies, bosses, relics and perks with sprites/icons."""
-    from gamejam_may_2026.perks import PERK_POOL    # type: ignore
+    from gamejam_may_2026.perks import PERK_POOL  # type: ignore
     from gamejam_may_2026.relics import RELIC_POOL  # type: ignore
 
     surf.fill(C.C_BG)
 
     # ── Decorative border ────────────────────────────────────────────────────
     border_col = (35, 65, 25)
-    pygame.draw.line(surf, border_col, (0, 4),             (C.SCREEN_W, 4),             3)
+    pygame.draw.line(surf, border_col, (0, 4), (C.SCREEN_W, 4), 3)
     pygame.draw.line(surf, border_col, (0, C.SCREEN_H - 5), (C.SCREEN_W, C.SCREEN_H - 5), 3)
 
     # ── Header ───────────────────────────────────────────────────────────────
@@ -998,16 +1091,14 @@ def draw_codex(surf: pygame.Surface, tab: int, scroll: int = 0) -> None:
     TAB_Y = HEADER_H
     tab_w = C.SCREEN_W // len(_CODEX_TABS)
     for i, label in enumerate(_CODEX_TABS):
-        active = (i == tab)
+        active = i == tab
         rx = i * tab_w
         bg = (45, 80, 35) if active else (20, 38, 15)
         bd = (80, 165, 65) if active else (35, 68, 28)
         pygame.draw.rect(surf, bg, (rx, TAB_Y, tab_w, TAB_H))
         pygame.draw.rect(surf, bd, (rx, TAB_Y, tab_w, TAB_H), 2)
-        lbl = _font(18, bold=active).render(label, True,
-                                             (185, 235, 150) if active else (85, 130, 65))
-        surf.blit(lbl, (rx + tab_w // 2 - lbl.get_width() // 2,
-                        TAB_Y + TAB_H // 2 - lbl.get_height() // 2))
+        lbl = _font(18, bold=active).render(label, True, (185, 235, 150) if active else (85, 130, 65))
+        surf.blit(lbl, (rx + tab_w // 2 - lbl.get_width() // 2, TAB_Y + TAB_H // 2 - lbl.get_height() // 2))
 
     # ── Content area ─────────────────────────────────────────────────────────
     CONTENT_Y = HEADER_H + TAB_H + 8
@@ -1022,7 +1113,7 @@ def draw_codex(surf: pygame.Surface, tab: int, scroll: int = 0) -> None:
         COLS = 4
         CARD_W = (C.SCREEN_W - PAD * (COLS + 1)) // COLS
         CARD_H = 165
-        SPRITE_R = 28        # clip radius for enemy preview
+        SPRITE_R = 28  # clip radius for enemy preview
 
         # Calculate total height for scrolling
         rows = (len(entries) + COLS - 1) // COLS
@@ -1057,18 +1148,14 @@ def draw_codex(surf: pygame.Surface, tab: int, scroll: int = 0) -> None:
 
             # Name
             name_surf = _font(15, bold=True).render(name, True, (165, 220, 130))
-            surf.blit(name_surf, (cx_card + CARD_W // 2 - name_surf.get_width() // 2,
-                                  cy_card + SPRITE_R * 2 + 18))
+            surf.blit(name_surf, (cx_card + CARD_W // 2 - name_surf.get_width() // 2, cy_card + SPRITE_R * 2 + 18))
 
             # Floor badge
             badge_surf = _font(12).render(badge, True, (200, 170, 70))
-            surf.blit(badge_surf, (cx_card + CARD_W // 2 - badge_surf.get_width() // 2,
-                                   cy_card + SPRITE_R * 2 + 36))
+            surf.blit(badge_surf, (cx_card + CARD_W // 2 - badge_surf.get_width() // 2, cy_card + SPRITE_R * 2 + 36))
 
             # Description (wrapped)
-            _draw_wrapped(surf, desc, _font(12),
-                          cx_card + 8, cy_card + SPRITE_R * 2 + 52,
-                          CARD_W - 16, (100, 145, 80))
+            _draw_wrapped(surf, desc, _font(12), cx_card + 8, cy_card + SPRITE_R * 2 + 52, CARD_W - 16, (100, 145, 80))
 
         surf.set_clip(old_clip)
 
@@ -1077,10 +1164,8 @@ def draw_codex(surf: pygame.Surface, tab: int, scroll: int = 0) -> None:
             frac = scroll / max_scroll
             bar_h = max(24, int(CONTENT_H * CONTENT_H / total_h))
             bar_y = CONTENT_Y + int(frac * (CONTENT_H - bar_h))
-            pygame.draw.rect(surf, (40, 70, 30),
-                             (C.SCREEN_W - 8, CONTENT_Y, 6, CONTENT_H), border_radius=3)
-            pygame.draw.rect(surf, (75, 145, 60),
-                             (C.SCREEN_W - 8, bar_y, 6, bar_h), border_radius=3)
+            pygame.draw.rect(surf, (40, 70, 30), (C.SCREEN_W - 8, CONTENT_Y, 6, CONTENT_H), border_radius=3)
+            pygame.draw.rect(surf, (75, 145, 60), (C.SCREEN_W - 8, bar_y, 6, bar_h), border_radius=3)
 
     elif tab == 2:
         # ── Relics grid ──────────────────────────────────────────────────────
@@ -1117,13 +1202,12 @@ def draw_codex(surf: pygame.Surface, tab: int, scroll: int = 0) -> None:
 
             # Name
             name_surf = _font(14, bold=True).render(relic.name, True, (210, 190, 255))
-            surf.blit(name_surf, (cx_card + CARD_W // 2 - name_surf.get_width() // 2,
-                                  icon_cy + ICON_SIZE // 2 + 6))
+            surf.blit(name_surf, (cx_card + CARD_W // 2 - name_surf.get_width() // 2, icon_cy + ICON_SIZE // 2 + 6))
 
             # Description
-            _draw_wrapped(surf, relic.desc, _font(12),
-                          cx_card + 8, icon_cy + ICON_SIZE // 2 + 24,
-                          CARD_W - 16, (135, 115, 195))
+            _draw_wrapped(
+                surf, relic.desc, _font(12), cx_card + 8, icon_cy + ICON_SIZE // 2 + 24, CARD_W - 16, (135, 115, 195)
+            )
 
         surf.set_clip(old_clip)
 
@@ -1131,10 +1215,8 @@ def draw_codex(surf: pygame.Surface, tab: int, scroll: int = 0) -> None:
             frac = scroll / max_scroll
             bar_h = max(24, int(CONTENT_H * CONTENT_H / total_h))
             bar_y = CONTENT_Y + int(frac * (CONTENT_H - bar_h))
-            pygame.draw.rect(surf, (35, 28, 60),
-                             (C.SCREEN_W - 8, CONTENT_Y, 6, CONTENT_H), border_radius=3)
-            pygame.draw.rect(surf, (95, 70, 170),
-                             (C.SCREEN_W - 8, bar_y, 6, bar_h), border_radius=3)
+            pygame.draw.rect(surf, (35, 28, 60), (C.SCREEN_W - 8, CONTENT_Y, 6, CONTENT_H), border_radius=3)
+            pygame.draw.rect(surf, (95, 70, 170), (C.SCREEN_W - 8, bar_y, 6, bar_h), border_radius=3)
 
     elif tab == 3:
         # ── Perks grid ───────────────────────────────────────────────────────
@@ -1171,13 +1253,12 @@ def draw_codex(surf: pygame.Surface, tab: int, scroll: int = 0) -> None:
 
             # Name
             name_surf = _font(14, bold=True).render(perk.name, True, (165, 235, 210))
-            surf.blit(name_surf, (cx_card + CARD_W // 2 - name_surf.get_width() // 2,
-                                  icon_cy + ICON_SIZE // 2 + 6))
+            surf.blit(name_surf, (cx_card + CARD_W // 2 - name_surf.get_width() // 2, icon_cy + ICON_SIZE // 2 + 6))
 
             # Description
-            _draw_wrapped(surf, perk.desc, _font(12),
-                          cx_card + 8, icon_cy + ICON_SIZE // 2 + 24,
-                          CARD_W - 16, (100, 170, 145))
+            _draw_wrapped(
+                surf, perk.desc, _font(12), cx_card + 8, icon_cy + ICON_SIZE // 2 + 24, CARD_W - 16, (100, 170, 145)
+            )
 
         surf.set_clip(old_clip)
 
@@ -1185,7 +1266,229 @@ def draw_codex(surf: pygame.Surface, tab: int, scroll: int = 0) -> None:
             frac = scroll / max_scroll
             bar_h = max(24, int(CONTENT_H * CONTENT_H / total_h))
             bar_y = CONTENT_Y + int(frac * (CONTENT_H - bar_h))
-            pygame.draw.rect(surf, (20, 38, 32),
-                             (C.SCREEN_W - 8, CONTENT_Y, 6, CONTENT_H), border_radius=3)
-            pygame.draw.rect(surf, (65, 148, 118),
-                             (C.SCREEN_W - 8, bar_y, 6, bar_h), border_radius=3)
+            pygame.draw.rect(surf, (20, 38, 32), (C.SCREEN_W - 8, CONTENT_Y, 6, CONTENT_H), border_radius=3)
+            pygame.draw.rect(surf, (65, 148, 118), (C.SCREEN_W - 8, bar_y, 6, bar_h), border_radius=3)
+
+
+# ── Arena Mode UI ─────────────────────────────────────────────────────────────
+
+_ARENA_COLS = 6
+_ARENA_CARD_W = 180
+_ARENA_CARD_H = 128  # taller to hold sprite + name + desc
+_ARENA_GAP = 10
+
+# Vertical layout constants (computed once)
+_ARENA_GRID_TOP = 160  # y where the enemy grid starts
+_ARENA_COUNT_TOP = _ARENA_GRID_TOP + 3 * (_ARENA_CARD_H + _ARENA_GAP) + 14
+_ARENA_START_TOP = _ARENA_COUNT_TOP + 60
+_ARENA_START_W = 260
+_ARENA_START_H = 52
+
+
+def _arena_card_rect(idx: int) -> pygame.Rect:
+    """Return the screen rect for arena enemy card *idx*."""
+    col = idx % _ARENA_COLS
+    row = idx // _ARENA_COLS
+    total_w = _ARENA_COLS * _ARENA_CARD_W + (_ARENA_COLS - 1) * _ARENA_GAP
+    start_x = (C.SCREEN_W - total_w) // 2
+    return pygame.Rect(
+        start_x + col * (_ARENA_CARD_W + _ARENA_GAP),
+        _ARENA_GRID_TOP + row * (_ARENA_CARD_H + _ARENA_GAP),
+        _ARENA_CARD_W,
+        _ARENA_CARD_H,
+    )
+
+
+def arena_count_arrow_rects() -> tuple[pygame.Rect, pygame.Rect]:
+    """Return (dec_rect, inc_rect) for the count − / + arrow buttons.
+
+    The buttons sit immediately left/right of the count number display area.
+    A fixed 52 px clearance from screen centre leaves room for up to 3 digits.
+    """
+    cx = C.SCREEN_W // 2
+    btn_w = 40
+    btn_h = 40
+    clearance = 28  # half the number display zone (fits "99" at font-28)
+    y = _ARENA_COUNT_TOP + 2
+    return (
+        pygame.Rect(cx - clearance - btn_w, y, btn_w, btn_h),  # −  (left)
+        pygame.Rect(cx + clearance, y, btn_w, btn_h),  # +  (right)
+    )
+
+
+def arena_start_button_rect() -> pygame.Rect:
+    """Return the rect for the START FIGHT button."""
+    return pygame.Rect(
+        C.SCREEN_W // 2 - _ARENA_START_W // 2,
+        _ARENA_START_TOP,
+        _ARENA_START_W,
+        _ARENA_START_H,
+    )
+
+
+def draw_arena_select(
+    surf: pygame.Surface,
+    entries: list,
+    selected: int,
+    count: int,
+    focus: str = "grid",  # "grid" | "count" | "start"
+) -> None:
+    """Arena mode enemy selection screen with enemy sprites."""
+    surf.fill(C.C_BG)
+    cx = C.SCREEN_W // 2
+
+    pygame.draw.line(surf, (45, 20, 70), (0, 4), (C.SCREEN_W, 4), 3)
+    pygame.draw.line(surf, (45, 20, 70), (0, C.SCREEN_H - 5), (C.SCREEN_W, C.SCREEN_H - 5), 3)
+
+    # ── Title ─────────────────────────────────────────────────────────────────
+    title = _font(52, bold=True).render("ARENA MODE", True, (185, 120, 255))
+    shadow = _font(52, bold=True).render("ARENA MODE", True, (55, 18, 95))
+    surf.blit(shadow, (cx - shadow.get_width() // 2 + 2, 18 + 2))
+    surf.blit(title, (cx - title.get_width() // 2, 18))
+    sub = _font(15).render("No items · no relics · pure skill", True, (110, 75, 165))
+    surf.blit(sub, (cx - sub.get_width() // 2, 76))
+
+    # ── Enemy grid ────────────────────────────────────────────────────────────
+    SPRITE_R = 26  # clip radius for in-card sprite preview
+
+    for i, entry in enumerate(entries):
+        rect = _arena_card_rect(i)
+        is_sel = i == selected
+        is_boss = entry.get("is_boss", False)
+
+        if is_sel and focus == "grid":
+            bg_col = (78, 26, 132)
+            bd_col = (215, 148, 255)
+            nm_col = (255, 225, 255)
+            bd_w = 2
+        elif is_sel:
+            bg_col = (55, 18, 92)
+            bd_col = (155, 90, 210)
+            nm_col = (220, 195, 245)
+            bd_w = 2
+        elif is_boss:
+            bg_col = (52, 12, 32)
+            bd_col = (165, 50, 68)
+            nm_col = (225, 120, 138)
+            bd_w = 1
+        else:
+            bg_col = (22, 14, 40)
+            bd_col = (60, 44, 98)
+            nm_col = (158, 138, 205)
+            bd_w = 1
+
+        pygame.draw.rect(surf, bg_col, rect, border_radius=6)
+        pygame.draw.rect(surf, bd_col, rect, bd_w, border_radius=6)
+
+        # ── Sprite preview ────────────────────────────────────────────────────
+        sprite_cx = rect.centerx
+        sprite_cy = rect.y + SPRITE_R + 8
+        pygame.draw.circle(surf, (10, 6, 18), (sprite_cx, sprite_cy), SPRITE_R + 3)
+        _codex_enemy_sprite(surf, sprite_cx, sprite_cy, SPRITE_R, entry.get("cls"), entry.get("cls_kwargs", {}))
+
+        # BOSS badge
+        if is_boss:
+            tag = _font(10, bold=True).render("BOSS", True, (220, 75, 95))
+            surf.blit(tag, (rect.right - tag.get_width() - 4, rect.y + 3))
+
+        # Name
+        nm = _font(14, bold=True).render(entry["name"], True, nm_col)
+        surf.blit(nm, (rect.centerx - nm.get_width() // 2, sprite_cy + SPRITE_R + 5))
+
+        # Description (clipped)
+        ds = _font(11).render(entry.get("desc", ""), True, (160, 140, 210) if is_sel else (105, 88, 152))
+        old_clip = surf.get_clip()
+        surf.set_clip(rect.inflate(-4, 0))
+        surf.blit(ds, (rect.centerx - ds.get_width() // 2, sprite_cy + SPRITE_R + 23))
+        surf.set_clip(old_clip)
+
+    # ── Count selector ────────────────────────────────────────────────────────
+    sel_entry = entries[selected]
+    max_c = sel_entry.get("max_count", 10)
+    is_count_focused = focus == "count"
+
+    count_y = _ARENA_COUNT_TOP
+
+    # "Count" label above the row
+    lbl = _font(14).render("COUNT", True, (185, 148, 255) if is_count_focused else (110, 85, 155))
+    surf.blit(lbl, (cx - lbl.get_width() // 2, count_y - 18))
+
+    # Dec / Inc buttons — positions come from arena_count_arrow_rects()
+    dec_r, inc_r = arena_count_arrow_rects()
+
+    # Pill background spans from dec_r.left to inc_r.right
+    pill_rect = pygame.Rect(dec_r.left - 6, count_y - 2, inc_r.right - dec_r.left + 12, dec_r.height + 4)
+    pill_col = (50, 24, 84) if is_count_focused else (24, 12, 42)
+    pill_bd = (180, 115, 255) if is_count_focused else (80, 50, 130)
+    pygame.draw.rect(surf, pill_col, pill_rect, border_radius=10)
+    pygame.draw.rect(surf, pill_bd, pill_rect, 2, border_radius=10)
+
+    # Dec / Inc buttons
+    for btn_r, symbol, active in [(dec_r, "−", count > 1), (inc_r, "+", count < max_c)]:
+        btn_bg = (68, 34, 116) if (active and is_count_focused) else (30, 14, 52)
+        btn_bd = (185, 120, 255) if (active and is_count_focused) else (72, 46, 114)
+        sym_c = (240, 210, 255) if active else (88, 66, 126)
+        pygame.draw.rect(surf, btn_bg, btn_r, border_radius=6)
+        pygame.draw.rect(surf, btn_bd, btn_r, 2, border_radius=6)
+        sym = _font(22, bold=True).render(symbol, True, sym_c)
+        surf.blit(sym, (btn_r.centerx - sym.get_width() // 2, btn_r.centery - sym.get_height() // 2))
+
+    # Count number centred between buttons
+    cnt_s = _font(28, bold=True).render(str(count), True, (245, 225, 255))
+    surf.blit(cnt_s, (cx - cnt_s.get_width() // 2, count_y + 3))
+
+    # "/ max" hint to the right of the + button
+    max_s = _font(12).render(f"/ {max_c}", True, (105, 80, 155))
+    surf.blit(max_s, (inc_r.right + 6, count_y + 15))
+
+    # ── Start button ─────────────────────────────────────────────────────────
+    is_start_focused = focus == "start"
+    sbr = arena_start_button_rect()
+    sbg = (62, 185, 52) if is_start_focused else (28, 88, 22)
+    sbd = (130, 255, 110) if is_start_focused else (60, 165, 48)
+    slc = (220, 255, 205) if is_start_focused else (150, 220, 130)
+    pygame.draw.rect(surf, sbg, sbr, border_radius=8)
+    pygame.draw.rect(surf, sbd, sbr, 2, border_radius=8)
+    sbl = _font(22, bold=True).render("START FIGHT", True, slc)
+    surf.blit(sbl, (sbr.centerx - sbl.get_width() // 2, sbr.centery - sbl.get_height() // 2))
+
+    # ── Navigation hints ──────────────────────────────────────────────────────
+    hint_y = sbr.bottom + 12
+    hints = "Arrows — navigate   ·   Tab — switch focus   ·   Enter / Space — start   ·   Esc — back"
+    hs = _font(13).render(hints, True, (72, 55, 108))
+    surf.blit(hs, (cx - hs.get_width() // 2, hint_y))
+
+
+def draw_arena_result(
+    surf: pygame.Surface,
+    won: bool,
+    enemy_name: str,
+    count: int,
+) -> None:
+    """Win / lose overlay drawn on top of the frozen arena fight."""
+    overlay = pygame.Surface((C.SCREEN_W, C.SCREEN_H), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 185))
+    surf.blit(overlay, (0, 0))
+
+    cx = C.SCREEN_W // 2
+    cy = C.SCREEN_H // 2
+
+    if won:
+        title_text = "VICTORY!"
+        title_col = (255, 220, 60)
+        label_text = f"Defeated {count}× {enemy_name}"
+        label_col = (200, 185, 120)
+    else:
+        title_text = "DEFEATED"
+        title_col = (210, 50, 50)
+        label_text = f"Slain by {enemy_name}"
+        label_col = (180, 110, 110)
+
+    title = _font(68, bold=True).render(title_text, True, title_col)
+    surf.blit(title, (cx - title.get_width() // 2, cy - 145))
+
+    sub = _font(26).render(label_text, True, label_col)
+    surf.blit(sub, (cx - sub.get_width() // 2, cy - 62))
+
+    hint = _font(22).render("Press  R  to return to menu", True, (165, 148, 115))
+    surf.blit(hint, (cx - hint.get_width() // 2, cy - 10))

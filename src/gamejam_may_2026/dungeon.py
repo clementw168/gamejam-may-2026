@@ -18,7 +18,10 @@ from gamejam_may_2026.rooms import TEMPLATES, Room
 
 # ── Direction helpers ─────────────────────────────────────────────────────────
 DIRS: dict[str, tuple[int, int]] = {
-    "N": (0, -1), "S": (0, 1), "E": (1, 0), "W": (-1, 0),
+    "N": (0, -1),
+    "S": (0, 1),
+    "E": (1, 0),
+    "W": (-1, 0),
 }
 OPP: dict[str, str] = {"N": "S", "S": "N", "E": "W", "W": "E"}
 
@@ -29,6 +32,7 @@ def _step(pos: tuple[int, int], d: str) -> tuple[int, int]:
 
 
 # ── DungeonRoom node ──────────────────────────────────────────────────────────
+
 
 class DungeonRoom:
     """One node in the dungeon graph."""
@@ -41,8 +45,8 @@ class DungeonRoom:
         self.visited: bool = False
         self.cleared: bool = False
         self.is_start: bool = False
-        self.is_boss:  bool = False
-        self.is_shop:  bool = False
+        self.is_boss: bool = False
+        self.is_shop: bool = False
         # Shop items are set by game.py on first entry; stored here so they
         # persist if the player re-enters the room.  Each entry is a plain dict:
         #   {"kind": "hp"|"perk", "cost": int, "perk": Perk|None, "bought": bool}
@@ -50,14 +54,19 @@ class DungeonRoom:
 
     def __repr__(self) -> str:
         tags = []
-        if self.is_start: tags.append("START")
-        if self.is_boss:  tags.append("BOSS")
-        if self.is_shop:  tags.append("SHOP")
-        if self.cleared:  tags.append("cleared")
+        if self.is_start:
+            tags.append("START")
+        if self.is_boss:
+            tags.append("BOSS")
+        if self.is_shop:
+            tags.append("SHOP")
+        if self.cleared:
+            tags.append("cleared")
         return f"DungeonRoom({self.gx},{self.gy} {' '.join(tags)} doors={set(self.connections)})"
 
 
 # ── Dungeon ───────────────────────────────────────────────────────────────────
+
 
 class Dungeon:
     """Generates and holds the room graph for one floor."""
@@ -101,7 +110,7 @@ class Dungeon:
             tmpl = templates[i % len(templates)]
             room = Room(template_idx=tmpl, doors=doors)
             dr = DungeonRoom(pos[0], pos[1], room)
-            dr.is_start = (pos == (0, 0))
+            dr.is_start = pos == (0, 0)
             self.rooms[pos] = dr
 
         # ── Phase 3: link DungeonRoom cross-references ─────────────────────────
@@ -121,8 +130,7 @@ class Dungeon:
 
         # Mark one non-start, non-boss room as the shop.
         # Prefer a room at BFS depth 1 or 2 to keep it reachable early.
-        candidates = [pos for pos in self.rooms
-                      if pos != (0, 0) and pos != boss_pos]
+        candidates = [pos for pos in self.rooms if pos != (0, 0) and pos != boss_pos]
         if candidates:
             self.rooms[random.choice(candidates)].is_shop = True
 
