@@ -102,12 +102,85 @@ def _template_island() -> list[list[int]]:
     return t
 
 
+def _template_corridor() -> list[list[int]]:
+    """Two N–S side corridors separated by vertical dividers with 3-tile choke passages."""
+    t = _empty()
+    _border(t)
+    # Left divider — gap at rows 9–11 (aligns with E/W door height)
+    _rect(t, 2, 12, 7, 2)   # rows 2-8
+    _rect(t, 12, 12, 7, 2)  # rows 12-18
+    # Right divider — same gap
+    _rect(t, 2, 26, 7, 2)   # rows 2-8
+    _rect(t, 12, 26, 7, 2)  # rows 12-18
+    return t
+
+
+def _template_pit_ring() -> list[list[int]]:
+    """Large impassable central pit with a ring walkway around the perimeter."""
+    t = _empty()
+    _border(t)
+    _rect(t, 5, 14, 10, 12)  # central pit: rows 5-14, cols 14-25
+    return t
+
+
+def _template_rubble_heap() -> list[list[int]]:
+    """Asymmetric scatter of wall blocks — deliberately no axis of symmetry."""
+    t = _empty()
+    _border(t)
+    # Top-left quadrant
+    _rect(t,  3,  4, 1, 3)
+    _rect(t,  5,  9, 2, 1)
+    _rect(t,  7,  5, 1, 4)
+    # Top-right quadrant
+    _rect(t,  2, 30, 2, 2)
+    _rect(t,  6, 33, 1, 3)
+    _rect(t,  4, 25, 1, 2)
+    # Bottom-left quadrant
+    _rect(t, 13,  3, 2, 2)
+    _rect(t, 15,  8, 1, 3)
+    _rect(t, 16,  4, 1, 2)
+    # Bottom-right quadrant
+    _rect(t, 12, 31, 1, 4)
+    _rect(t, 14, 28, 2, 2)
+    _rect(t, 16, 33, 2, 1)
+    # Centre-adjacent pieces (away from boss spawn zone)
+    _rect(t,  4, 15, 1, 2)
+    _rect(t, 14, 23, 1, 2)
+    return t
+
+
+def _template_pillars_dense() -> list[list[int]]:
+    """Twelve single-tile pillars breaking lines of sight across the room."""
+    t = _empty()
+    _border(t)
+    # Top row of pillars
+    _rect(t,  4,  7, 1, 1)
+    _rect(t,  4, 14, 1, 1)
+    _rect(t,  5, 25, 1, 1)   # slight row offset for visual interest
+    _rect(t,  4, 32, 1, 1)
+    # Middle row (shifted columns, avoid door rows 9-11 near border)
+    _rect(t, 10,  6, 1, 1)
+    _rect(t, 10, 16, 1, 1)
+    _rect(t, 10, 23, 1, 1)
+    _rect(t, 10, 33, 1, 1)
+    # Bottom row
+    _rect(t, 15,  8, 1, 1)
+    _rect(t, 15, 15, 1, 1)
+    _rect(t, 14, 24, 1, 1)
+    _rect(t, 15, 31, 1, 1)
+    return t
+
+
 TEMPLATES = [
-    _template_arena,
-    _template_columns,
-    _template_lshapes,
-    _template_maze,
-    _template_island,
+    _template_arena,          # 0 — all floors
+    _template_columns,        # 1 — all floors
+    _template_lshapes,        # 2 — all floors
+    _template_maze,           # 3 — all floors
+    _template_island,         # 4 — all floors
+    _template_corridor,       # 5 — floor 2+
+    _template_pit_ring,       # 6 — floor 3+
+    _template_rubble_heap,    # 7 — floor 4+
+    _template_pillars_dense,  # 8 — floor 5+
 ]
 
 # ── Tile renderer ─────────────────────────────────────────────────────────────
@@ -211,9 +284,21 @@ class Room:
         return True
 
     # ── Spawn positions ────────────────────────────────────────────────────────
-    def get_spawn_positions(self, count: int, min_dist_from_centre: float = 200.0) -> list[tuple[float, float]]:
+    def get_spawn_positions(
+        self,
+        count: int,
+        min_dist_from_centre: float = 200.0,
+        exclude_pos: tuple[float, float] | None = None,
+        exclude_dist: float = 200.0,
+    ) -> list[tuple[float, float]]:
+        """Return up to *count* floor-tile centres away from the room centre.
+
+        If *exclude_pos* is given, also exclude tiles within *exclude_dist* px
+        of that point (used to keep enemies away from the player entry point).
+        """
         cx = C.ROOM_PIXEL_W / 2
         cy = C.ROOM_PIXEL_H / 2
+        ex_sq = exclude_dist * exclude_dist
         candidates: list[tuple[float, float]] = []
         for r in range(2, C.ROOM_TILE_H - 2):
             for c in range(2, C.ROOM_TILE_W - 2):
@@ -221,7 +306,10 @@ class Room:
                     px = (c + 0.5) * C.TILE_SIZE
                     py = (r + 0.5) * C.TILE_SIZE
                     if (px - cx) ** 2 + (py - cy) ** 2 >= min_dist_from_centre ** 2:
-                        candidates.append((px, py))
+                        if exclude_pos is None or (
+                            (px - exclude_pos[0]) ** 2 + (py - exclude_pos[1]) ** 2 >= ex_sq
+                        ):
+                            candidates.append((px, py))
         random.shuffle(candidates)
         return candidates[:count]
 

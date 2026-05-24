@@ -40,6 +40,7 @@ from gamejam_may_2026.enemies import (
     IronWarden,
     MagmaSlug,
     ShadowWraith,
+    SporeElder,
     SporePlant,
     StoneCrawler,
     VenomfangBat,
@@ -297,15 +298,63 @@ class BurnPatch:
 # ── Spawn wave ─────────────────────────────────────────────────────────────────
 
 
-def _spawn_wave(room: Room, floor: int, room_num: int = 1) -> list[Enemy]:
+def _available_perks(player: Player) -> list[Perk]:
+    """Return PERK_POOL excluding one-shot perks already applied to this player."""
+    pool = [
+        p for p in PERK_POOL
+        if not ((p.id == "piercing_shot" and player.piercing)
+                or (p.id == "double_shot" and player.double_shot))
+    ]
+    return pool if len(pool) >= 3 else PERK_POOL
+
+
+def _pack_wave(
+    room: Room,
+    floor: int,
+    exclude_pos: tuple[float, float] | None = None,
+) -> list[Enemy]:
+    """Spawn a large group of a single enemy type (pack-room encounter)."""
+    fl = min(floor, 7)
+    pack_types = ["runner", "wolf"]
+    if fl >= 4:
+        pack_types += ["bat"]
+    if fl >= 5:
+        pack_types += ["turret"]
+    if fl >= 7:
+        pack_types += ["shrieker"]
+    pack = random.choice(pack_types)
+
+    if pack == "runner":
+        n, cls = random.randint(5, 7), GoblinRunner
+    elif pack == "wolf":
+        n, cls = random.randint(4, 6), Wolf
+    elif pack == "bat":
+        n, cls = random.randint(5, 7), VenomfangBat
+    elif pack == "turret":
+        n, cls = random.randint(3, 4), CrystalTurret
+    else:  # shrieker
+        n, cls = random.randint(4, 5), VoidShrieker
+
+    positions = room.get_spawn_positions(n, min_dist_from_centre=150.0,
+                                         exclude_pos=exclude_pos)
+    return [cls(px, py, floor=floor) for px, py in positions]
+
+
+def _spawn_wave(
+    room: Room,
+    floor: int,
+    room_num: int = 1,
+    exclude_pos: tuple[float, float] | None = None,
+) -> list[Enemy]:
     """Scale enemy variety with room_num; scale counts and stats with floor."""
     depth = min(room_num, 3)
     fl = min(floor, 7)
     #                              F1  F2  F3  F4  F5  F6  F7
-    runners = (2, 3, 4, 4, 5, 5, 6)[fl - 1]
-    wolves = (1, 1, 2, 2, 2, 3, 3)[fl - 1]
-    archers = (1, 2, 2, 3, 3, 4, 4)[fl - 1] if depth >= 2 else 0
-    plants = (1, 1, 2, 2, 3, 3, 4)[fl - 1] if depth >= 3 else 0
+    runners = (2, 3, 4, 4, 4, 4, 5)[fl - 1]
+    wolves = (1, 1, 2, 2, 2, 2, 2)[fl - 1]
+    archers = (1, 2, 2, 2, 3, 3, 3)[fl - 1] if depth >= 2 else 0
+    plants = (1, 1, 2, 2, 2, 2, 3)[fl - 1] if depth >= 3 else 0
+    elders = (0, 0, 0, 0, 1, 1, 1)[fl - 1] if depth >= 3 else 0   # floor 5+ — elite SporePlant
     crawlers = (0, 0, 0, 1, 1, 2, 2)[fl - 1]  # floor 4+ — armoured melee
     bats = (0, 0, 0, 1, 2, 2, 3)[fl - 1]  # floor 4+ — fast arc mover
     turrets = (0, 0, 0, 0, 1, 1, 2)[fl - 1]  # floor 5+ — stationary, directional
@@ -314,8 +363,8 @@ def _spawn_wave(room: Room, floor: int, room_num: int = 1) -> list[Enemy]:
     slugs = (0, 0, 0, 0, 0, 1, 1)[fl - 1]  # floor 6+ — slow melee + burn patches
     shriekers = (0, 0, 0, 0, 0, 0, 1)[fl - 1]  # floor 7  — death burst + void flash
 
-    total = runners + wolves + archers + plants + crawlers + bats + turrets + wraiths + bone_archers + slugs + shriekers
-    positions = room.get_spawn_positions(total)
+    total = runners + wolves + archers + plants + elders + crawlers + bats + turrets + wraiths + bone_archers + slugs + shriekers
+    positions = room.get_spawn_positions(total, exclude_pos=exclude_pos)
     idx = 0
     wave: list[Enemy] = []
     for _ in range(runners):
@@ -333,6 +382,10 @@ def _spawn_wave(room: Room, floor: int, room_num: int = 1) -> list[Enemy]:
     for _ in range(plants):
         if idx < len(positions):
             wave.append(SporePlant(*positions[idx], floor=floor))
+            idx += 1
+    for _ in range(elders):
+        if idx < len(positions):
+            wave.append(SporeElder(*positions[idx], floor=floor))
             idx += 1
     for _ in range(crawlers):
         if idx < len(positions):
@@ -653,7 +706,7 @@ class Game:
                 {"kind": "hp", "cost": 5, "label": "Heart Vial", "desc": "Restore 1 HP.", "icon": "♥", "bought": False}
             )
             # Slots 1 & 2: two distinct random perks
-            chosen = random.sample(PERK_POOL, 2)
+            chosen = random.sample(_available_perks(self.player), 2)
             for perk in chosen:
                 dr.shop_items.append(
                     {
@@ -1106,7 +1159,7 @@ class Game:
             if not dr.is_start and not dr.is_shop and random.random() < 0.5:
                 # Normal combat room — 50 % chance to spawn a mossy chest
                 cx2, cy2 = room.find_spawn_near_centre(28.0)
-                self.chests.append(Chest(cx2, cy2, random.sample(PERK_POOL, 3)))
+                self.chests.append(Chest(cx2, cy2, random.sample(_available_perks(self.player), 3)))
 
         # ── Door-exit detection (only when cleared) ────────────────────────────
         if dr.cleared:
@@ -1223,7 +1276,11 @@ class Game:
                 self.enemies = _spawn_boss(next_dr.room, self.dungeon.floor)
                 self.coins.clear()
             else:
-                self.enemies = _spawn_wave(next_dr.room, self.dungeon.floor, self.room_num)
+                ex = (self.player.x, self.player.y)
+                if self.dungeon.floor >= 2 and random.random() < 0.20:
+                    self.enemies = _pack_wave(next_dr.room, self.dungeon.floor, exclude_pos=ex)
+                else:
+                    self.enemies = _spawn_wave(next_dr.room, self.dungeon.floor, self.room_num, exclude_pos=ex)
                 self.coins.clear()
         else:
             self.enemies = []
@@ -1236,6 +1293,8 @@ class Game:
 
         self._trans_old_room = None
         self._trans_next = None
+        # Entry grace period — 0.5 s iframes so the player can orient after transition
+        self.player._iframes = max(self.player._iframes, 0.5)
         self.state = "PLAYING"
 
     # ── Helpers ───────────────────────────────────────────────────────────────

@@ -113,6 +113,27 @@ class Enemy:
             else:
                 break
 
+    def _steer_toward(self, tx: float, ty: float, room: Room) -> tuple[float, float]:
+        """8-direction wall-aware steering toward (tx, ty). Returns (vx, vy) at self.speed."""
+        dx, dy = tx - self.x, ty - self.y
+        dist = math.hypot(dx, dy) or 1.0
+        goal = (dx / dist, dy / dist)
+        best_score, best_dir = -2.0, goal
+        probe_r = self.radius * 2
+        for i in range(8):
+            angle = i * math.pi / 4
+            d = (math.cos(angle), math.sin(angle))
+            probe_x = self.x + d[0] * probe_r
+            probe_y = self.y + d[1] * probe_r
+            tc = int(probe_x // C.TILE_SIZE)
+            tr = int(probe_y // C.TILE_SIZE)
+            wall = (0 <= tc < C.ROOM_TILE_W and 0 <= tr < C.ROOM_TILE_H
+                    and room.tiles[tr][tc] == C.TILE_WALL)
+            score = d[0] * goal[0] + d[1] * goal[1] - (1.0 if wall else 0.0)
+            if score > best_score:
+                best_score, best_dir = score, d
+        return best_dir[0] * self.speed, best_dir[1] * self.speed
+
     def take_hit(self, damage: int, particles: ParticleSystem) -> None:
         if self._iframes > 0:
             return
@@ -184,12 +205,10 @@ class GoblinRunner(Enemy):
         if self.tick_status(dt, particles):
             return
 
-        # Chase player
-        dx = player.x - self.x
-        dy = player.y - self.y
-        dist = math.hypot(dx, dy)
-        if dist > 0:
-            self._move(dx / dist * self.speed * dt, dy / dist * self.speed * dt, room)
+        # Chase player with wall-aware steering
+        if math.hypot(player.x - self.x, player.y - self.y) > 0:
+            vx, vy = self._steer_toward(player.x, player.y, room)
+            self._move(vx * dt, vy * dt, room)
 
         # Contact damage
         if self._contact_cd <= 0 and math.hypot(player.x - self.x, player.y - self.y) < self.radius + player.radius:
@@ -327,9 +346,10 @@ class Wolf(Enemy):
                 angle_deg = math.degrees(math.atan2(self._lunge_dy, self._lunge_dx))
                 particles.emit_wolf_lunge(self.x, self.y, angle_deg)
         else:
-            # Wobbling approach — oscillate perpendicular to chase direction
+            # Wobbling approach — steer toward player (wall-aware), oscillate perp
             if dist > 0:
-                nx, ny = dx / dist, dy / dist
+                vx, vy = self._steer_toward(player.x, player.y, room)
+                nx, ny = vx / (self.speed or 1.0), vy / (self.speed or 1.0)
                 wobble = math.sin(self._t * 2.4) * 0.65
                 mx = nx + (-ny * wobble)
                 my = ny + (nx * wobble)
@@ -888,11 +908,9 @@ class StoneCrawler(Enemy):
         if self.tick_status(dt, particles):
             return
 
-        dx = player.x - self.x
-        dy = player.y - self.y
-        dist = math.hypot(dx, dy)
-        if dist > 0:
-            self._move(dx / dist * self.speed * dt, dy / dist * self.speed * dt, room)
+        if math.hypot(player.x - self.x, player.y - self.y) > 0:
+            vx, vy = self._steer_toward(player.x, player.y, room)
+            self._move(vx * dt, vy * dt, room)
 
         if self._contact_cd <= 0 and math.hypot(player.x - self.x, player.y - self.y) < self.radius + player.radius:
             if player.take_damage(C.CRAWLER_DAMAGE):
@@ -954,6 +972,8 @@ class VenomfangBat(Enemy):
         super().__init__(x, y, hp=C.BAT_HP, radius=C.BAT_RADIUS, speed=speed, coin_drop=C.BAT_COIN_DROP)
         self._t = random.uniform(0.0, 6.28)  # wobble phase
         self._contact_cd = 0.0
+        self._wander_angle = random.uniform(0.0, math.pi * 2)
+        self._wander_t = 0.0
 
     def update(
         self,
@@ -976,7 +996,15 @@ class VenomfangBat(Enemy):
         dy = player.y - self.y
         dist = math.hypot(dx, dy)
         if dist > 0:
-            nx, ny = dx / dist, dy / dist
+            # Erratic wander direction shifts every 0.6 s
+            self._wander_t += dt
+            if self._wander_t > 0.6:
+                self._wander_t = 0.0
+                self._wander_angle += random.uniform(-math.pi / 2, math.pi / 2)
+            # Wall-aware base direction blended 70 % toward player, 30 % wander
+            vx, vy = self._steer_toward(player.x, player.y, room)
+            nx = vx / (self.speed or 1.0) * 0.7 + math.cos(self._wander_angle) * 0.3
+            ny = vy / (self.speed or 1.0) * 0.7 + math.sin(self._wander_angle) * 0.3
             # Arc wobble — perpendicular amplitude ~120 px/s
             wobble_amp = 120.0 / (self.speed or 1.0)
             wobble = math.sin(self._t * 4.0) * wobble_amp
@@ -1403,11 +1431,9 @@ class MagmaSlug(Enemy):
         if self.tick_status(dt, particles):
             return
 
-        dx = player.x - self.x
-        dy = player.y - self.y
-        dist = math.hypot(dx, dy)
-        if dist > 0:
-            self._move(dx / dist * self.speed * dt, dy / dist * self.speed * dt, room)
+        if math.hypot(player.x - self.x, player.y - self.y) > 0:
+            vx, vy = self._steer_toward(player.x, player.y, room)
+            self._move(vx * dt, vy * dt, room)
 
         if self._contact_cd <= 0 and math.hypot(player.x - self.x, player.y - self.y) < self.radius + player.radius:
             if player.take_damage(C.SLUG_DAMAGE):
@@ -1473,6 +1499,8 @@ class VoidShrieker(Enemy):
         self._contact_cd = 0.0
         self._hit_shake = False  # game.py reads and clears this
         self._death_projs: list[EnemyProjectile] = []
+        self._wander_angle = random.uniform(0.0, math.pi * 2)
+        self._wander_t = 0.0
 
     def take_hit(self, damage: int, particles: ParticleSystem) -> None:
         super().take_hit(damage, particles)
@@ -1513,7 +1541,15 @@ class VoidShrieker(Enemy):
         dy = player.y - self.y
         dist = math.hypot(dx, dy)
         if dist > 0:
-            nx, ny = dx / dist, dy / dist
+            # Erratic wander direction shifts every 0.6 s
+            self._wander_t += dt
+            if self._wander_t > 0.6:
+                self._wander_t = 0.0
+                self._wander_angle += random.uniform(-math.pi / 2, math.pi / 2)
+            # Wall-aware base direction blended 70 % toward player, 30 % wander
+            vx, vy = self._steer_toward(player.x, player.y, room)
+            nx = vx / (self.speed or 1.0) * 0.7 + math.cos(self._wander_angle) * 0.3
+            ny = vy / (self.speed or 1.0) * 0.7 + math.sin(self._wander_angle) * 0.3
             wobble = math.sin(self._t * 5.5) * 0.55
             mx = nx + (-ny * wobble)
             my = ny + (nx * wobble)

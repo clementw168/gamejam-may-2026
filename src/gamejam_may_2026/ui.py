@@ -437,7 +437,7 @@ def draw_boss_hpbar(
 # ── Minimap ───────────────────────────────────────────────────────────────────
 def draw_minimap(surf: pygame.Surface, dungeon: Dungeon) -> None:
     """Overlay a small room-grid in the top-right corner of the playfield."""
-    CW, CH = 14, 7      # cell width × height (2 : 1 matches room proportions)
+    CW, CH = 20, 11     # cell width × height (2 : 1 matches room proportions)
     GAP    = 2
     STRIDE_X = CW + GAP
     STRIDE_Y = CH + GAP
@@ -648,7 +648,7 @@ def draw_menu(surf: pygame.Surface, highscore: dict) -> None:
 
     # Subtitle tagline
     tag = _font(20).render(
-        "A forest-ruins roguelite  ·  7 floors  ·  4 bosses", True, (60, 115, 55))
+        "A forest-ruins roguelite  ·  7 floors  ·  6 bosses", True, (60, 115, 55))
     surf.blit(tag, (cx - tag.get_width() // 2, ty + 100))
 
     # ── "Press any key" prompt ────────────────────────────────────────────────
