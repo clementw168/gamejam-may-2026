@@ -658,19 +658,22 @@ _MENU_BTN_STYLES = [
     ((28, 52, 22), (52, 96, 40), (58, 128, 48), (100, 220, 80), (145, 210, 125), (220, 255, 195)),
     # Arena Mode — purple
     ((35, 18, 58), (68, 28, 110), (88, 42, 150), (180, 100, 255), (165, 120, 230), (220, 175, 255)),
+    # Endless Mode — teal/cyan
+    ((12, 42, 52), (18, 78, 100), (28, 110, 140), (60, 200, 240), (90, 190, 220), (180, 240, 255)),
     # Codex — amber
     ((44, 34, 12), (80, 60, 18), (110, 80, 28), (200, 155, 55), (185, 155, 90), (240, 210, 120)),
 ]
-_MENU_BTN_LABELS = ["Dungeon Mode", "Arena Mode", "Codex"]
-_MENU_BTN_SUBLABELS = ["7-floor roguelite run", "1v1 practice fights", "View enemies & relics"]
+_MENU_BTN_LABELS = ["Dungeon Mode", "Arena Mode", "Endless Mode", "Codex"]
+_MENU_BTN_SUBLABELS = ["7-floor roguelite run", "1v1 practice fights", "Survive infinite waves", "View enemies & relics"]
 
 
 def _menu_button_rects() -> list[pygame.Rect]:
-    """Return the three main-menu button rects (Dungeon, Arena, Codex)."""
-    total_h = 3 * _MENU_BTN_H + 2 * _MENU_BTN_GAP
-    top = C.SCREEN_H // 2 - total_h // 2 + 30  # slight downward nudge from centre
+    """Return the four main-menu button rects (Dungeon, Arena, Endless, Codex)."""
+    n = 4
+    total_h = n * _MENU_BTN_H + (n - 1) * _MENU_BTN_GAP
+    top = C.SCREEN_H // 2 - total_h // 2 + 20  # slight downward nudge from centre
     bx = C.SCREEN_W // 2 - _MENU_BTN_W // 2
-    return [pygame.Rect(bx, top + i * (_MENU_BTN_H + _MENU_BTN_GAP), _MENU_BTN_W, _MENU_BTN_H) for i in range(3)]
+    return [pygame.Rect(bx, top + i * (_MENU_BTN_H + _MENU_BTN_GAP), _MENU_BTN_W, _MENU_BTN_H) for i in range(n)]
 
 
 def menu_button_at(mx: int, my: int) -> int:
@@ -1492,3 +1495,190 @@ def draw_arena_result(
 
     hint = _font(22).render("Press  R  to return to menu", True, (165, 148, 115))
     surf.blit(hint, (cx - hint.get_width() // 2, cy - 10))
+
+
+# ── Endless Mode UI ───────────────────────────────────────────────────────────
+
+_ENDLESS_MAX_START = 35  # 7 full cycles × 5 waves
+
+
+def endless_start_button_rect() -> pygame.Rect:
+    return pygame.Rect(C.SCREEN_W // 2 - 110, 482, 220, 52)
+
+
+def endless_wave_arrow_rects() -> tuple[pygame.Rect, pygame.Rect]:
+    """Return (dec_rect, inc_rect) for the wave selector arrows."""
+    arrow_y = 408
+    cx = C.SCREEN_W // 2
+    return pygame.Rect(cx - 185, arrow_y, 44, 36), pygame.Rect(cx + 141, arrow_y, 44, 36)
+
+
+def draw_endless_select(surf: pygame.Surface, selected_wave: int) -> None:
+    """Endless mode selection screen: pick starting wave."""
+    surf.fill(C.C_BG)
+    cx = C.SCREEN_W // 2
+
+    # Decorative borders
+    border_col = (20, 80, 100)
+    pygame.draw.line(surf, border_col, (0, 4), (C.SCREEN_W, 4), 3)
+    pygame.draw.line(surf, border_col, (0, C.SCREEN_H - 5), (C.SCREEN_W, C.SCREEN_H - 5), 3)
+
+    # Title
+    title = _font(64, bold=True).render("∞ ENDLESS MODE", True, (80, 210, 240))
+    shadow = _font(64, bold=True).render("∞ ENDLESS MODE", True, (20, 70, 90))
+    surf.blit(shadow, (cx - shadow.get_width() // 2 + 3, 55 + 3))
+    surf.blit(title, (cx - title.get_width() // 2, 55))
+
+    tag = _font(17).render("Enemies drop coins — but there are no shops to spend them.", True, (60, 160, 185))
+    surf.blit(tag, (cx - tag.get_width() // 2, 135))
+
+    # Cycle structure explanation
+    struct_y = 174
+    struct = [
+        ("Waves 1, 3, 4", "+1 HP", (160, 210, 170)),
+        ("Wave 2", "+1 HP  •  Choose a perk", (210, 240, 140)),
+        ("Wave 5  (boss)", "Full HP restore  •  Choose a relic", (220, 160, 255)),
+    ]
+    fnt_key = _font(16, bold=True)
+    fnt_val = _font(16)
+    col_key = (140, 180, 210)
+    for i, (key, val, col_val) in enumerate(struct):
+        ks = fnt_key.render(key + ":", True, col_key)
+        vs = fnt_val.render(val, True, col_val)
+        ky = struct_y + i * 24
+        surf.blit(ks, (cx - 340, ky))
+        surf.blit(vs, (cx - 340 + 180, ky))
+
+    # Divider
+    pygame.draw.line(surf, (30, 80, 100), (cx - 340, struct_y + 82), (cx + 340, struct_y + 82), 1)
+
+    # Starting wave selector label
+    lbl = _font(22, bold=True).render("Skip to wave:", True, (175, 210, 230))
+    surf.blit(lbl, (cx - 340, 272))
+
+    # Wave display box + arrows
+    dec_rect, inc_rect = endless_wave_arrow_rects()
+    box_rect = pygame.Rect(dec_rect.right + 6, dec_rect.y, inc_rect.left - dec_rect.right - 12, 36)
+
+    if selected_wave == 0:
+        wave_text = "0  —  Fresh start"
+        sub_text = "Start with 0 perks · 0 relics"
+        sub_col = (100, 130, 140)
+    else:
+        cycles = selected_wave // 5
+        wave_text = f"Wave {selected_wave}"
+        p_s = "perk" if cycles == 1 else "perks"
+        r_s = "relic" if cycles == 1 else "relics"
+        sub_text = f"Pre-select {cycles} {p_s} · {cycles} {r_s}  —  first fight: wave {selected_wave + 1}"
+        sub_col = (140, 210, 170)
+
+    # Arrow buttons (use ASCII < > — block glyphs are not in monospace font)
+    for rect, label, is_dec in ((dec_rect, "<<", True), (inc_rect, ">>", False)):
+        can = (is_dec and selected_wave > 0) or (not is_dec and selected_wave < _ENDLESS_MAX_START)
+        bg = (25, 65, 85) if can else (18, 38, 48)
+        bd = (60, 160, 200) if can else (35, 70, 85)
+        pygame.draw.rect(surf, bg, rect, border_radius=6)
+        pygame.draw.rect(surf, bd, rect, 2, border_radius=6)
+        ac = (120, 200, 230) if can else (50, 80, 90)
+        a = _font(18, bold=True).render(label, True, ac)
+        surf.blit(a, (rect.centerx - a.get_width() // 2, rect.y + 8))
+
+    # Wave display box
+    pygame.draw.rect(surf, (15, 40, 58), box_rect, border_radius=6)
+    pygame.draw.rect(surf, (60, 150, 185), box_rect, 2, border_radius=6)
+    wt = _font(20, bold=True).render(wave_text, True, (190, 230, 250))
+    surf.blit(wt, (box_rect.centerx - wt.get_width() // 2, box_rect.y + 7))
+
+    # Sub-text under selector
+    st = _font(15).render(sub_text, True, sub_col)
+    surf.blit(st, (cx - st.get_width() // 2, dec_rect.bottom + 10))
+
+    # Start button
+    start_rect = endless_start_button_rect()
+    pygame.draw.rect(surf, (18, 72, 100), start_rect, border_radius=8)
+    pygame.draw.rect(surf, (60, 190, 230), start_rect, 2, border_radius=8)
+    start_lbl = _font(26, bold=True).render("[ START ]", True, (160, 230, 255))
+    surf.blit(start_lbl, (start_rect.centerx - start_lbl.get_width() // 2, start_rect.y + 12))
+
+    # Hint
+    hint = _font(15).render(
+        "Left / Right to adjust   *   Space / Enter to start   *   Esc to cancel",
+        True,
+        (55, 120, 145),
+    )
+    surf.blit(hint, (cx - hint.get_width() // 2, start_rect.bottom + 16))
+
+
+def draw_endless_between(
+    surf: pygame.Surface,
+    wave_completed: int,
+    reward_lines: list[str],
+    next_action: str,
+) -> None:
+    """Between-wave overlay for endless mode."""
+    overlay = pygame.Surface((C.SCREEN_W, C.SCREEN_H), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 165))
+    surf.blit(overlay, (0, 0))
+
+    cx = C.SCREEN_W // 2
+    cy = C.PLAYFIELD_H // 2
+
+    # Title
+    if wave_completed % 5 == 0:
+        title_text = f"Boss Wave {wave_completed} Defeated!"
+        title_col = (255, 170, 255)
+    else:
+        title_text = f"Wave {wave_completed} Cleared!"
+        title_col = (220, 200, 80)
+    title = _font(52, bold=True).render(title_text, True, title_col)
+    surf.blit(title, (cx - title.get_width() // 2, cy - 120))
+
+    # Reward lines
+    for i, line in enumerate(reward_lines):
+        if "HP" in line or "heal" in line.lower():
+            col = (130, 240, 140)
+        elif "perk" in line.lower() or "relic" in line.lower():
+            col = (220, 200, 255)
+        else:
+            col = (185, 175, 145)
+        t = _font(24).render(line, True, col)
+        surf.blit(t, (cx - t.get_width() // 2, cy - 42 + i * 34))
+
+    # Continue hint
+    if next_action == "perk":
+        hint_text = "Press  SPACE  to choose a perk"
+        hint_col = (210, 240, 150)
+    elif next_action == "relic":
+        hint_text = "Press  SPACE  to choose a relic"
+        hint_col = (200, 170, 255)
+    else:
+        hint_text = f"Press  SPACE  for wave {wave_completed + 1}"
+        hint_col = (140, 200, 215)
+    hint = _font(20).render(hint_text, True, hint_col)
+    surf.blit(hint, (cx - hint.get_width() // 2, cy + 72))
+
+
+def draw_endless_dead(surf: pygame.Surface, wave_reached: int) -> None:
+    """Death overlay for endless mode."""
+    overlay = pygame.Surface((C.SCREEN_W, C.SCREEN_H), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 190))
+    surf.blit(overlay, (0, 0))
+
+    cx = C.SCREEN_W // 2
+    cy = C.SCREEN_H // 2
+
+    title = _font(72, bold=True).render("FALLEN", True, (210, 50, 50))
+    surf.blit(title, (cx - title.get_width() // 2, cy - 148))
+
+    survived = wave_reached - 1
+    if survived <= 0:
+        wave_text = "Fell before surviving a single wave"
+    elif survived == 1:
+        wave_text = "Survived 1 wave"
+    else:
+        wave_text = f"Survived {survived} waves"
+    ws = _font(30).render(wave_text, True, (175, 145, 115))
+    surf.blit(ws, (cx - ws.get_width() // 2, cy - 68))
+
+    hint = _font(22).render("Press  R  to return to menu", True, (140, 120, 90))
+    surf.blit(hint, (cx - hint.get_width() // 2, cy - 16))

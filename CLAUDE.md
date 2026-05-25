@@ -16,7 +16,7 @@ uv run verdant-depths [--keys arrows|wasd|zqsd]
 | `config.py` | Runtime config — key layout (`--keys` flag) |
 | `sounds.py` | Procedural audio synthesis + asset file override |
 | `main.py` | pygame init, mixer pre-init, `sounds.init()`, game loop |
-| `game.py` | State machine: **MENU** / PLAYING ↔ TRANSITIONING / UPGRADE / SHOP / FLOOR_CLEAR / RELIC / VICTORY / DEAD / **ARENA_SELECT** / **ARENA** / ARENA_WIN / ARENA_DEAD; dungeon nav, gate blocking, coin drops, floor progression, boss spawn, summon drain, pack wave roll, run-stats tracking, high-score I/O |
+| `game.py` | State machine: **MENU** / PLAYING ↔ TRANSITIONING / UPGRADE / SHOP / FLOOR_CLEAR / RELIC / VICTORY / DEAD / **ARENA_SELECT** / **ARENA** / ARENA_WIN / ARENA_DEAD / **ENDLESS_SELECT** / **ENDLESS** / ENDLESS_BETWEEN / ENDLESS_DEAD; dungeon nav, gate blocking, coin drops, floor progression, boss spawn, summon drain, pack wave roll, run-stats tracking, high-score I/O |
 | `camera.py` | World↔screen transform + screen shake |
 | `rooms.py` | Tile grid, 9 templates (5 base + 4 underground-ruin), collision, `find_spawn_near_centre`, door tile cuts, `get_spawn_positions` with `exclude_pos` |
 | `dungeon.py` | DFS room graph, BFS boss detection, floor-weighted template selection |
@@ -127,6 +127,7 @@ Override any track: drop `<name>.ogg` (or `.wav`) in `src/gamejam_may_2026/asset
 | R | Return to menu after death / victory |
 | C | View Codex (from main menu) |
 | A | Arena Mode (from main menu) |
+| E | Endless Mode (from main menu) |
 | Esc | Quit |
 
 ### Arena Mode controls (ARENA_SELECT screen)
@@ -201,6 +202,44 @@ Pick 1 of 2 offered after each floor boss (`RELIC` state between `FLOOR_CLEAR` a
 - Boss gate: bars + movement block until all non-boss rooms cleared
 - Boss cleared → `FLOOR_CLEAR` overlay → `RELIC` pick → floor advances (new `Dungeon`, `room_num` resets, player stats preserved)
 - Floor 7 boss cleared → `VICTORY` screen
+
+## Endless Mode
+
+Accessible from the main menu with `E`. No coins, no shop, no floor structure — pure wave survival.
+
+### States
+- `ENDLESS_SELECT` — wave-selection screen (pick starting multiple of 5: 0, 5, 10 … 35)
+- `ENDLESS` — sealed room combat (all doors locked, full relic/perk effects active)
+- `ENDLESS_BETWEEN` — between-wave overlay (rewards displayed; Space to continue)
+- `ENDLESS_DEAD` — player died; press R to return to menu
+
+### 5-wave cycle structure
+| Wave in cycle | Reward |
+|---|---|
+| 1 | +1 HP |
+| 2 | +1 HP + choose a perk |
+| 3 | +1 HP |
+| 4 | +1 HP |
+| 5 (boss) | Full HP restore + choose a relic |
+
+### Difficulty scaling
+- Virtual floor = `min(7, 1 + cycle)` where cycle is 0-indexed (wave 1–5 = cycle 0, wave 6–10 = cycle 1 …)
+- Room depth = `min(3, position_in_cycle + 1)` → enemy composition uses existing `_spawn_wave(room, vfloor, depth)`
+- Boss waves cycle through all 7 campaign bosses then repeat
+- After cycle 6 (wave 35+), difficulty stays at max floor 7 with room_depth=3
+
+### Starting from a higher wave
+- Player selects a multiple of 5 (e.g. 10); first fight is wave 11
+- Pre-selects N/5 perks + N/5 relics before combat starts (using existing UPGRADE/RELIC screens)
+- `_endless_mode = True` flag causes `_pick_perk`/`_pick_relic` to return to endless flow instead of `PLAYING`
+- Pre-pick queue: `['perk', 'relic']` × cycles_completed; processed one at a time before first wave
+
+### Selection screen controls
+| Key | Action |
+|---|---|
+| ◄ / ► (or Left/Right arrows) | Decrease / increase starting wave by 5 |
+| Space / Enter | Start fight |
+| Esc | Back to menu |
 
 ## High score & menus
 
