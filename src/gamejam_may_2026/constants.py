@@ -91,13 +91,12 @@ ARCHER_SHOOT_CD = 2.2  # s between shots
 ARCHER_COIN_DROP = 2
 
 # ── Wolf ──────────────────────────────────────────────────────────────────────
-WOLF_SPEED = 128
+WOLF_SPEED = 175          # slightly below PLAYER_SPEED (200)
 WOLF_HP = 2
 WOLF_RADIUS = 12
-WOLF_LUNGE_SPEED = 390  # px/s during lunge dash
-WOLF_LUNGE_DUR = 0.18  # s
-WOLF_LUNGE_CD = 2.2  # s between lunges
-WOLF_LUNGE_RANGE = 130  # px; triggers lunge when closer than this
+WOLF_LUNGE_SPEED = 550    # slightly below PLAYER_DASH_SPEED (620)
+WOLF_LUNGE_DUR = 0.14     # matches PLAYER_DASH_DURATION
+WOLF_LUNGE_CD = 1.0       # frequent — dashes at any range whenever CD ready
 WOLF_COIN_DROP = 2  # uniform drop
 
 # ── Spore Plant ───────────────────────────────────────────────────────────────
@@ -153,9 +152,9 @@ C_CRAWLER = (138, 118, 92)
 C_CRAWLER_DARK = (85, 72, 56)
 
 # ── Venom Bat (floor 4+) ─────────────────────────────────────────────────────
-BAT_HP = 2
+BAT_HP = 4
 BAT_RADIUS = 10
-BAT_SPEED = 160.0
+BAT_SPEED = 185.0
 BAT_COIN_DROP = 2
 
 C_BAT = (95, 65, 135)
@@ -164,8 +163,9 @@ C_BAT_DARK = (55, 38, 85)
 # ── Crystal Turret (floor 5+) ────────────────────────────────────────────────
 TURRET_HP = 10
 TURRET_RADIUS = 18
-TURRET_SHOOT_CD = 2.5
-TURRET_PROJ_SPEED = 220.0
+TURRET_SHOOT_CD = 0.45   # rapid fire
+TURRET_WIND_DUR = 0.25   # short wind-up before each shot
+TURRET_PROJ_SPEED = 380.0  # fast aimed shots
 TURRET_COIN_DROP = 2
 
 C_TURRET = (95, 180, 215)
@@ -193,7 +193,7 @@ BONE_ARCHER_COIN_DROP = 2
 
 C_BONE = (215, 200, 175)
 C_BONE_DARK = (155, 138, 112)
-C_BONE_SPIKE = (240, 228, 205)  # slightly brighter for the heavy spike
+C_BONE_SPIKE = (255, 190, 60)  # amber-orange — clearly distinct from regular bone shots
 
 # ── Magma Slug (floor 6+) ────────────────────────────────────────────────────
 SLUG_HP = 14
@@ -201,7 +201,7 @@ SLUG_RADIUS = 16
 SLUG_SPEED = 45.0
 SLUG_DAMAGE = 2
 SLUG_COIN_DROP = 2
-SLUG_DROP_CD = 0.5  # s between burn-patch drops
+SLUG_DROP_CD = 0.8  # s between burn-patch drops
 
 C_SLUG = (195, 80, 25)
 C_SLUG_DARK = (130, 50, 12)

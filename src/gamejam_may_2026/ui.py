@@ -959,14 +959,14 @@ def _get_codex_enemies() -> tuple[list, list]:
             "F1+",
             "Keeps its distance and fires aimed arrows with a wind-up telegraph.",
         ),
-        (E.Wolf, {}, "Wolf", "F1+", "Wobbling flanker that lunges at high speed when close. Deals contact damage."),
+        (E.Wolf, {}, "Wolf", "F1+", "Fast flanker that dashes at any range. Deals contact damage."),
         (E.SporePlant, {}, "Spore Plant", "F1+", "Stationary. Alternates 4-way spore volleys at 0° and 45°."),
         (
             E.StoneCrawler,
             {},
             "Stone Crawler",
             "F4+",
-            "Armoured melee foe. First 3 hits deflected; deals 2 damage on contact.",
+            "Armoured chaser. Deflects the first 3 arrows back at you. Deals 2 damage on contact.",
         ),
         (
             E.VenomfangBat,
@@ -980,12 +980,12 @@ def _get_codex_enemies() -> tuple[list, list]:
             {},
             "Crystal Turret",
             "F5+",
-            "Stationary rotating turret. Immune front ±60°; takes ×2 from behind.",
+            "Stationary turret. Rapid-fires fast aimed shots directly at you.",
         ),
         (E.SporeElder, {}, "Spore Elder", "F5+ elite", "Elite plant. Fires 8-way volleys and periodic 6-spore clouds."),
         (E.ShadowWraith, {}, "Shadow Wraith", "F5+", "Teleports every 4 s. Fires pairs of homing projectiles."),
-        (E.BoneArcher, {}, "Bone Archer", "F6+", "3-way spread shots; every 4th shot is a slow heavy bone spike."),
-        (E.MagmaSlug, {}, "Magma Slug", "F6+", "Slow armoured chaser. Leaves burn patches; deals 2 contact damage."),
+        (E.BoneArcher, {}, "Bone Archer", "F6+", "3-way spread shots; every 4th shot is a 3-way volley of slow heavy bone spikes (2 dmg each)."),
+        (E.MagmaSlug, {}, "Magma Slug", "F6+", "Slow armoured chaser. Leaves huge magma pools that linger for 8s; deals 2 contact damage."),
         (
             E.VoidShrieker,
             {},
@@ -1460,6 +1460,118 @@ def draw_arena_select(
     hints = "Arrows — navigate   ·   Tab — switch focus   ·   Enter / Space — start   ·   Esc — back"
     hs = _font(13).render(hints, True, (72, 55, 108))
     surf.blit(hs, (cx - hs.get_width() // 2, hint_y))
+
+
+# ── Arena Relic Select UI ─────────────────────────────────────────────────────
+
+_ARENA_RELIC_COLS = 5
+_ARENA_RELIC_CARD_W = 234
+_ARENA_RELIC_CARD_H = 88
+_ARENA_RELIC_GAP = 8
+_ARENA_RELIC_GRID_TOP = 155
+_ARENA_RELIC_NO_RELIC_Y = 96
+_ARENA_RELIC_NO_RELIC_W = 280
+_ARENA_RELIC_NO_RELIC_H = 42
+
+
+def arena_relic_no_relic_rect() -> pygame.Rect:
+    """Return the rect for the 'No Relic' button in the arena relic select screen."""
+    return pygame.Rect(
+        C.SCREEN_W // 2 - _ARENA_RELIC_NO_RELIC_W // 2,
+        _ARENA_RELIC_NO_RELIC_Y,
+        _ARENA_RELIC_NO_RELIC_W,
+        _ARENA_RELIC_NO_RELIC_H,
+    )
+
+
+def arena_relic_card_rect(idx: int) -> pygame.Rect:
+    """Return the screen rect for relic card *idx* (0..19 = RELIC_POOL index)."""
+    col = idx % _ARENA_RELIC_COLS
+    row = idx // _ARENA_RELIC_COLS
+    total_w = _ARENA_RELIC_COLS * _ARENA_RELIC_CARD_W + (_ARENA_RELIC_COLS - 1) * _ARENA_RELIC_GAP
+    start_x = (C.SCREEN_W - total_w) // 2
+    return pygame.Rect(
+        start_x + col * (_ARENA_RELIC_CARD_W + _ARENA_RELIC_GAP),
+        _ARENA_RELIC_GRID_TOP + row * (_ARENA_RELIC_CARD_H + _ARENA_RELIC_GAP),
+        _ARENA_RELIC_CARD_W,
+        _ARENA_RELIC_CARD_H,
+    )
+
+
+def draw_arena_relic_select(
+    surf: pygame.Surface,
+    relic_pool: list,
+    selected: int,  # -1 = No Relic, 0..19 = RELIC_POOL index
+    hovered: int = -2,  # -2 = nothing, -1 = No Relic button, 0..19 = relic
+) -> None:
+    """Full-screen relic selection screen shown before an arena fight."""
+    surf.fill((8, 8, 18))
+
+    cx = C.SCREEN_W // 2
+
+    # Title
+    title = _font(36, bold=True).render("Choose a Relic", True, (200, 175, 255))
+    surf.blit(title, (cx - title.get_width() // 2, 18))
+    sub = _font(17).render("Pick one to take into the arena — or go in empty-handed", True, (100, 80, 150))
+    surf.blit(sub, (cx - sub.get_width() // 2, 58))
+
+    # ── "No Relic" button ────────────────────────────────────────────────────
+    nr_rect = arena_relic_no_relic_rect()
+    nr_sel = selected == -1
+    nr_hov = hovered == -1
+    nr_bg = (50, 38, 72) if nr_sel else (34, 24, 52) if nr_hov else (20, 14, 32)
+    nr_border = (210, 160, 255) if nr_sel else (140, 100, 200) if nr_hov else (65, 48, 96)
+    pygame.draw.rect(surf, nr_bg, nr_rect, border_radius=8)
+    pygame.draw.rect(surf, nr_border, nr_rect, 2, border_radius=8)
+    nr_label = _font(18, bold=nr_sel).render("✕  No Relic  (default)", True, (230, 210, 255) if nr_sel else (140, 120, 180))
+    surf.blit(nr_label, (nr_rect.centerx - nr_label.get_width() // 2, nr_rect.centery - nr_label.get_height() // 2))
+
+    # ── Relic grid ───────────────────────────────────────────────────────────
+    for i, relic in enumerate(relic_pool):
+        rect = arena_relic_card_rect(i)
+        is_sel = selected == i
+        is_hov = hovered == i
+
+        bg = (55, 40, 82) if is_sel else (38, 26, 58) if is_hov else (20, 13, 34)
+        border = (210, 160, 255) if is_sel else (140, 100, 200) if is_hov else (52, 36, 78)
+        name_col = (240, 215, 255) if is_sel else (195, 165, 235) if is_hov else (130, 110, 170)
+        desc_col = (170, 145, 210) if is_sel else (130, 105, 165) if is_hov else (90, 72, 120)
+
+        pygame.draw.rect(surf, bg, rect, border_radius=6)
+        pygame.draw.rect(surf, border, rect, 2, border_radius=6)
+
+        # Icon
+        icon_size = 26
+        icons.draw(surf, rect.x + 20, rect.centery, icon_size, relic.id, name_col)
+
+        # Name
+        name_surf = _font(16, bold=is_sel).render(relic.name, True, name_col)
+        surf.blit(name_surf, (rect.x + 46, rect.y + 14))
+
+        # Description (word-wrapped, 2 lines max)
+        _draw_wrapped(surf, relic.desc, _font(12), rect.x + 46, rect.y + 38, rect.width - 54, desc_col)
+
+    # ── Description panel for selected/hovered relic ─────────────────────────
+    n_rows = (len(relic_pool) + _ARENA_RELIC_COLS - 1) // _ARENA_RELIC_COLS
+    grid_bottom = _ARENA_RELIC_GRID_TOP + n_rows * _ARENA_RELIC_CARD_H + (n_rows - 1) * _ARENA_RELIC_GAP
+    desc_y = grid_bottom + 10
+
+    active = hovered if hovered >= -1 else selected
+    if active >= 0 and active < len(relic_pool):
+        relic = relic_pool[active]
+        panel_text = f"{relic.icon}  {relic.name}  —  {relic.desc}"
+        ps = _font(16).render(panel_text, True, (200, 180, 240))
+        surf.blit(ps, (cx - ps.get_width() // 2, desc_y))
+    elif active == -1:
+        ps = _font(16).render("No relic — you'll face the challenge unarmed", True, (110, 90, 150))
+        surf.blit(ps, (cx - ps.get_width() // 2, desc_y))
+
+    # ── Controls hint ────────────────────────────────────────────────────────
+    hint = _font(14).render(
+        "Arrow keys — navigate   ·   Enter / Space — confirm   ·   Esc — back to enemy select",
+        True, (65, 50, 95),
+    )
+    surf.blit(hint, (cx - hint.get_width() // 2, C.SCREEN_H - 24))
 
 
 def draw_arena_result(

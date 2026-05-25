@@ -381,8 +381,8 @@ class Wolf(Enemy):
                 mag = math.hypot(mx, my) or 1.0
                 self._move(mx / mag * self.speed * dt, my / mag * self.speed * dt, room)
 
-            # Trigger lunge when close enough
-            if dist <= C.WOLF_LUNGE_RANGE and self._lunge_cd <= 0 and dist > 0:
+            # Trigger lunge whenever CD is ready — dashes at any range
+            if self._lunge_cd <= 0 and dist > 0:
                 self._lunging = True
                 self._lunge_t = C.WOLF_LUNGE_DUR
                 self._lunge_dx = dx / dist
@@ -889,7 +889,8 @@ class AncientTree(Enemy):
 
 
 class StoneCrawler(Enemy):
-    """Armoured melee chaser — first 3 arrow hits are deflected by its stone shell.
+    """Armoured melee chaser — first 3 arrow hits are deflected by its stone shell,
+    reflecting them back at the player at full arrow speed.
     Shell breaks after 3 deflects; resets only on room re-entry (via game.py)."""
 
     _DEATH_COLOR_A = C.C_CRAWLER
@@ -1081,14 +1082,10 @@ class VenomfangBat(Enemy):
 
 
 class CrystalTurret(Enemy):
-    """Stationary turret — fires rotating 3-way crystal volleys.
-    Immune to arrows from the front face (±60°); takes double damage from behind.
-    The red dot on the body marks the vulnerable back face."""
+    """Stationary turret — rapid-fires fast aimed shots directly at the player."""
 
     _DEATH_COLOR_A = C.C_TURRET
     _DEATH_COLOR_B = (200, 240, 255)
-
-    _WIND_DUR = 0.5
 
     def __init__(self, x: float, y: float, *, floor: int = 1) -> None:
         hp = C.TURRET_HP + max(0, floor - 5) * 3  # 10 / 13 / 16 …
@@ -1116,28 +1113,28 @@ class CrystalTurret(Enemy):
         if self.tick_status(dt, particles):
             return
 
-        if self._shoot_cd <= self._WIND_DUR and not self._winding:
+        # Always track player
+        self._face_angle = math.atan2(player.y - self.y, player.x - self.x)
+
+        if self._shoot_cd <= C.TURRET_WIND_DUR and not self._winding:
             self._winding = True
             self._wind_up = 0.0
 
         if self._winding:
             self._wind_up += dt
-            if self._wind_up >= self._WIND_DUR:
-                spread = math.radians(28)
-                for off in (-spread, 0.0, spread):
-                    projs.append(
-                        EnemyProjectile(
-                            self.x,
-                            self.y,
-                            self._face_angle + off,
-                            speed=C.TURRET_PROJ_SPEED,
-                            color=C.C_TURRET_BEAM,
-                            damage=1,
-                            lifetime=2.5,
-                        )
+            if self._wind_up >= C.TURRET_WIND_DUR:
+                projs.append(
+                    EnemyProjectile(
+                        self.x,
+                        self.y,
+                        self._face_angle,
+                        speed=C.TURRET_PROJ_SPEED,
+                        color=C.C_TURRET_BEAM,
+                        damage=1,
+                        lifetime=2.5,
                     )
+                )
                 sounds.play("spore_shoot")
-                self._face_angle += math.radians(15)  # rotate for next volley
                 self._shoot_cd = C.TURRET_SHOOT_CD
                 self._winding = False
                 self._wind_up = 0.0
@@ -1154,7 +1151,7 @@ class CrystalTurret(Enemy):
 
         # Wind-up charge glow
         if self._winding:
-            frac = self._wind_up / self._WIND_DUR
+            frac = self._wind_up / C.TURRET_WIND_DUR
             glow_r = r + round(frac * 18)
             pygame.draw.circle(surf, C.C_TURRET_BEAM, (sx, sy), glow_r, 2)
 
@@ -1175,18 +1172,12 @@ class CrystalTurret(Enemy):
                 inner.append((sx + round(math.cos(a) * (r - 5)), sy + round(math.sin(a) * (r - 5))))
             pygame.draw.polygon(surf, C.C_TURRET_DARK, inner)
 
-        # Front-face indicator (bright spike in fire direction)
+        # Aim indicator (bright spike pointing at player)
         fa = self._face_angle
         tip_x = sx + round(math.cos(fa) * (r + 7))
         tip_y = sy + round(math.sin(fa) * (r + 7))
         pygame.draw.line(surf, C.C_TURRET_BEAM, (sx, sy), (tip_x, tip_y), 3)
         pygame.draw.circle(surf, (255, 255, 255), (tip_x, tip_y), 3)
-
-        # Back-face vulnerability marker (red dot on opposite side)
-        ba = fa + math.pi
-        bx_t = sx + round(math.cos(ba) * (r + 5))
-        by_t = sy + round(math.sin(ba) * (r + 5))
-        pygame.draw.circle(surf, (210, 55, 55), (bx_t, by_t), 4)
 
         # HP bar
         if self.hp < self.max_hp:
@@ -1375,18 +1366,21 @@ class BoneArcher(Enemy):
                 self._shot_count += 1
                 base_a = math.atan2(dy, dx)
                 if self._shot_count % 4 == 0:
-                    # Heavy bone spike — single slow projectile, 2 damage
-                    projs.append(
-                        EnemyProjectile(
-                            self.x,
-                            self.y,
-                            base_a,
-                            speed=140,
-                            color=C.C_BONE_SPIKE,
-                            damage=2,
-                            lifetime=3.5,
+                    # Heavy bone spike — 3-way spread of slow heavy projectiles, 2 damage each
+                    spread = math.radians(20)
+                    for off in (-spread, 0.0, spread):
+                        projs.append(
+                            EnemyProjectile(
+                                self.x,
+                                self.y,
+                                base_a + off,
+                                speed=140,
+                                color=C.C_BONE_SPIKE,
+                                damage=2,
+                                lifetime=3.5,
+                                radius=10,
+                            )
                         )
-                    )
                 else:
                     # Standard 3-way spread
                     spread = math.radians(20)
@@ -1413,7 +1407,7 @@ class BoneArcher(Enemy):
             frac = min(1.0, self._wind_up / self._WIND_DUR)
             pulse = min(255, int(frac * 255))
             is_spike = (self._shot_count + 1) % 4 == 0
-            col = (255, 255, 255) if not is_spike else (255, 230, 180)
+            col = (255, 255, 255) if not is_spike else C.C_BONE_SPIKE
             pygame.draw.circle(
                 surf,
                 (pulse, int(pulse * col[1] / 255), int(pulse * col[2] / 255)),

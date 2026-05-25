@@ -141,6 +141,7 @@ class EnemyProjectile:
         color: tuple[int, int, int] | None = None,
         damage: int | None = None,
         lifetime: float | None = None,
+        radius: int | None = None,
     ) -> None:
         self.x = x
         self.y = y
@@ -151,6 +152,7 @@ class EnemyProjectile:
         self.lifetime = lifetime if lifetime is not None else C.EPROJ_LIFETIME
         self.damage = damage if damage is not None else C.EPROJ_DAMAGE
         self.color = color if color is not None else C.C_ENEMY_PROJ
+        self.radius = radius if radius is not None else 6
         self.alive = True
 
     def update(self, dt: float, room: Room) -> None:
@@ -173,7 +175,7 @@ class EnemyProjectile:
     def draw(self, surf: pygame.Surface, camera: Camera) -> None:
         sx, sy = camera.apply_pos(self.x, self.y)
         sx, sy = round(sx), round(sy)
-        pygame.draw.circle(surf, self.color, (sx, sy), 6)
+        pygame.draw.circle(surf, self.color, (sx, sy), self.radius)
         # Inner highlight (brighter centre)
         inner = tuple(min(255, c + 110) for c in self.color)
-        pygame.draw.circle(surf, inner, (sx, sy), 3)
+        pygame.draw.circle(surf, inner, (sx, sy), max(1, self.radius // 2))

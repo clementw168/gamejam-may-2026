@@ -62,6 +62,8 @@ from gamejam_may_2026.ui import (
     _arena_card_rect,
     _relic_card_rect,
     _upgrade_card_rect,
+    arena_relic_card_rect,
+    arena_relic_no_relic_rect,
     endless_start_button_rect,
     endless_wave_arrow_rects,
 )
@@ -444,8 +446,8 @@ class BurnPatch:
     Fades visually as it expires.
     """
 
-    RADIUS: float = 20.0
-    LIFETIME: float = 4.0
+    RADIUS: float = 48.0
+    LIFETIME: float = 8.0
 
     def __init__(self, x: float, y: float) -> None:
         self.x = x
@@ -665,6 +667,8 @@ class Game:
         self._arena_selected: int = 0  # index into _ARENA_ENTRIES
         self._arena_count: int = 1  # enemies to spawn
         self._arena_focus: str = "grid"  # "grid" | "count" | "start"
+        self._arena_relic_selected: int = -1  # -1 = no relic, 0..19 = RELIC_POOL index
+        self._arena_relic_hovered: int = -2   # -2 = nothing, -1 = no relic btn, 0..19 = relic
 
         # Endless mode state
         self._endless_mode: bool = False  # True while inside an endless run
@@ -809,6 +813,8 @@ class Game:
                     self.state = "CODEX"
         elif self.state == "ARENA_SELECT":
             self._handle_arena_select_event(event)
+        elif self.state == "ARENA_RELIC_SELECT":
+            self._handle_arena_relic_select_event(event)
         elif self.state == "ARENA":
             self.player.handle_event(event, self.particles)
         elif self.state in ("ARENA_WIN", "ARENA_DEAD"):
@@ -915,9 +921,10 @@ class Game:
                 self.state = "MENU"
                 return
 
-            # Enter / Space always start from any focus
+            # Enter / Space always advance to relic select from any focus
             if k in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
-                self._start_arena()
+                self._arena_relic_hovered = -2
+                self.state = "ARENA_RELIC_SELECT"
                 return
 
             # Tab cycles focus forward; Shift+Tab backward
@@ -983,7 +990,8 @@ class Game:
                         break
                 # Click on start button
                 if ui.arena_start_button_rect().collidepoint(event.pos):
-                    self._start_arena()
+                    self._arena_relic_hovered = -2
+                    self.state = "ARENA_RELIC_SELECT"
                     return
                 # Click on count arrows
                 dec_r, inc_r = ui.arena_count_arrow_rects()
@@ -998,6 +1006,78 @@ class Game:
             elif event.button == 5:  # scroll down → -count
                 self._arena_count = max(1, self._arena_count - 1)
 
+    def _handle_arena_relic_select_event(self, event: pygame.event.Event) -> None:
+        """Handle input on the ARENA_RELIC_SELECT screen."""
+        n = len(RELIC_POOL)
+        cols = ui._ARENA_RELIC_COLS
+        rows = (n + cols - 1) // cols
+
+        if event.type == pygame.KEYDOWN:
+            k = event.key
+
+            if k == pygame.K_ESCAPE:
+                self.state = "ARENA_SELECT"
+                return
+
+            if k in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+                self._start_arena()
+                return
+
+            sel = self._arena_relic_selected
+            # Navigation: -1 = No Relic button; 0..n-1 = relic grid
+            if k in (pygame.K_UP, pygame.K_KP8):
+                if sel == -1:
+                    pass  # already at top
+                else:
+                    cur_row = sel // cols
+                    cur_col = sel % cols
+                    if cur_row == 0:
+                        self._arena_relic_selected = -1
+                    else:
+                        self._arena_relic_selected = (cur_row - 1) * cols + cur_col
+            elif k in (pygame.K_DOWN, pygame.K_KP2):
+                if sel == -1:
+                    self._arena_relic_selected = 0
+                else:
+                    cur_row = sel // cols
+                    cur_col = sel % cols
+                    next_idx = (cur_row + 1) * cols + cur_col
+                    if next_idx < n:
+                        self._arena_relic_selected = next_idx
+            elif k in (pygame.K_LEFT, pygame.K_KP4):
+                if sel > 0:
+                    self._arena_relic_selected = sel - 1
+                elif sel == -1:
+                    pass
+            elif k in (pygame.K_RIGHT, pygame.K_KP6):
+                if sel == -1:
+                    self._arena_relic_selected = 0
+                elif sel < n - 1:
+                    self._arena_relic_selected = sel + 1
+
+        elif event.type == pygame.MOUSEMOTION:
+            mx, my = event.pos
+            self._arena_relic_hovered = -2
+            if arena_relic_no_relic_rect().collidepoint(mx, my):
+                self._arena_relic_hovered = -1
+            else:
+                for i in range(n):
+                    if arena_relic_card_rect(i).collidepoint(mx, my):
+                        self._arena_relic_hovered = i
+                        break
+
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mx, my = event.pos
+            if arena_relic_no_relic_rect().collidepoint(mx, my):
+                self._arena_relic_selected = -1
+                self._start_arena()
+                return
+            for i in range(n):
+                if arena_relic_card_rect(i).collidepoint(mx, my):
+                    self._arena_relic_selected = i
+                    self._start_arena()
+                    return
+
     def _start_arena(self) -> None:
         """Spawn the selected enemy (and count) in a fresh room; enter ARENA state."""
         entry = _ARENA_ENTRIES[self._arena_selected]
@@ -1008,9 +1088,13 @@ class Game:
         dr = self.dungeon.current
         room = dr.room
 
-        # Fresh player — no relics, no perks
+        # Fresh player — no perks; apply arena relic if one was chosen
         px, py = room.find_spawn_near_centre(float(C.PLAYER_RADIUS))
         self.player = Player(px, py)
+        if 0 <= self._arena_relic_selected < len(RELIC_POOL):
+            relic = RELIC_POOL[self._arena_relic_selected]
+            relic.apply(self.player)
+            self.player.relics.append(relic)
 
         # Spawn enemies away from player
         positions = room.get_spawn_positions(count, min_dist_from_centre=100.0, exclude_pos=(px, py))
@@ -1162,16 +1246,18 @@ class Game:
                     actual_dmg = arrow.damage
                     if getattr(arrow, "_overcharged", False):
                         actual_dmg = arrow.damage * 3
-                    if isinstance(enemy, CrystalTurret):
-                        impact = math.atan2(arrow.y - enemy.y, arrow.x - enemy.x)
-                        diff = math.atan2(
-                            math.sin(impact - enemy._face_angle),
-                            math.cos(impact - enemy._face_angle),
+                    # StoneCrawler shell deflect — reflect arrow back at player
+                    if isinstance(enemy, StoneCrawler) and enemy._iframes <= 0 and enemy._shell_hits > 0:
+                        arrow.alive = False
+                        _ref_angle = math.atan2(self.player.y - enemy.y, self.player.x - enemy.x)
+                        self.enemy_projectiles.append(
+                            EnemyProjectile(enemy.x, enemy.y, _ref_angle,
+                                            speed=C.ARROW_SPEED, damage=actual_dmg,
+                                            color=C.C_ARROW)
                         )
-                        if abs(diff) < math.pi / 3:
-                            actual_dmg = 0
-                        elif abs(diff) > math.pi * 2 / 3:
-                            actual_dmg = max(actual_dmg, arrow.damage * 2)
+                        enemy.take_hit(actual_dmg, self.particles)
+                        self.camera.add_shake(3)
+                        break
                     if actual_dmg > 0:
                         enemy.take_hit(actual_dmg, self.particles)
                     self.camera.add_shake(3)
@@ -1193,15 +1279,15 @@ class Game:
                     if leech is not None and leech.alive:
                         leech.hp = min(leech.max_hp, leech.hp + 3)
 
-        self.enemies = [e for e in self.enemies if e.alive]
-        self.enemy_projectiles = [ep for ep in self.enemy_projectiles if ep.alive]
-
-        # Drain any late VoidShrieker death bursts
+        # Drain VoidShrieker death-burst projectiles before removing dead enemies
         for e in self.enemies:
             dps = getattr(e, "_death_projs", None)
             if dps:
                 self.enemy_projectiles.extend(dps)
                 dps.clear()
+
+        self.enemies = [e for e in self.enemies if e.alive]
+        self.enemy_projectiles = [ep for ep in self.enemy_projectiles if ep.alive]
 
         # ── Burn patches ──────────────────────────────────────────────────────
         _bda = getattr(self, "_burn_dot_acc", 0.0)
@@ -1588,16 +1674,18 @@ class Game:
                     actual_dmg = arrow.damage
                     if getattr(arrow, "_overcharged", False):
                         actual_dmg = arrow.damage * 3
-                    if isinstance(enemy, CrystalTurret):
-                        impact = math.atan2(arrow.y - enemy.y, arrow.x - enemy.x)
-                        diff = math.atan2(
-                            math.sin(impact - enemy._face_angle),
-                            math.cos(impact - enemy._face_angle),
+                    # StoneCrawler shell deflect — reflect arrow back at player
+                    if isinstance(enemy, StoneCrawler) and enemy._iframes <= 0 and enemy._shell_hits > 0:
+                        arrow.alive = False
+                        _ref_angle = math.atan2(p.y - enemy.y, p.x - enemy.x)
+                        self.enemy_projectiles.append(
+                            EnemyProjectile(enemy.x, enemy.y, _ref_angle,
+                                            speed=C.ARROW_SPEED, damage=actual_dmg,
+                                            color=C.C_ARROW)
                         )
-                        if abs(diff) < math.pi / 3:
-                            actual_dmg = 0
-                        elif abs(diff) > math.pi * 2 / 3:
-                            actual_dmg = max(actual_dmg, arrow.damage * 2)
+                        enemy.take_hit(actual_dmg, self.particles)
+                        self.camera.add_shake(3)
+                        break
                     if actual_dmg > 0:
                         if p.hunter_mark and not p._hunter_mark_used:
                             actual_dmg *= 3
@@ -1673,15 +1761,15 @@ class Game:
         # Prune expired blur clones
         self._blur_clones = [c for c in self._blur_clones if c["charges"] > 0]
 
-        self.enemies = [e for e in self.enemies if e.alive]
-        self.enemy_projectiles = [ep for ep in self.enemy_projectiles if ep.alive]
-
-        # Drain any late death-burst projectiles
+        # Drain VoidShrieker death-burst projectiles before removing dead enemies
         for e in self.enemies:
             dps = getattr(e, "_death_projs", None)
             if dps:
                 self.enemy_projectiles.extend(dps)
                 dps.clear()
+
+        self.enemies = [e for e in self.enemies if e.alive]
+        self.enemy_projectiles = [ep for ep in self.enemy_projectiles if ep.alive]
 
         # ── Burn patches ──────────────────────────────────────────────────────
         _bda = getattr(self, "_burn_dot_acc", 0.0)
@@ -1941,7 +2029,7 @@ class Game:
 
     # ── Update ────────────────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
-        if self.state in ("MENU", "PAUSED", "CODEX", "ARENA_SELECT", "ENDLESS_SELECT"):
+        if self.state in ("MENU", "PAUSED", "CODEX", "ARENA_SELECT", "ARENA_RELIC_SELECT", "ENDLESS_SELECT"):
             return  # these states freeze all game logic
         self.camera.update(dt)
         if self._show_staircase:
@@ -2127,21 +2215,22 @@ class Game:
                     arrow.hit_enemies.add(id(enemy))
                     if not arrow.piercing:
                         arrow.alive = False
-                    # CrystalTurret directional vulnerability
                     actual_dmg = arrow.damage
                     # Overcharged Quiver: every 4th arrow deals x3
                     if getattr(arrow, "_overcharged", False):
                         actual_dmg = arrow.damage * 3
-                    if isinstance(enemy, CrystalTurret):
-                        impact = math.atan2(arrow.y - enemy.y, arrow.x - enemy.x)
-                        diff = math.atan2(
-                            math.sin(impact - enemy._face_angle),
-                            math.cos(impact - enemy._face_angle),
+                    # StoneCrawler shell deflect — reflect arrow back at player
+                    if isinstance(enemy, StoneCrawler) and enemy._iframes <= 0 and enemy._shell_hits > 0:
+                        arrow.alive = False
+                        _ref_angle = math.atan2(self.player.y - enemy.y, self.player.x - enemy.x)
+                        self.enemy_projectiles.append(
+                            EnemyProjectile(enemy.x, enemy.y, _ref_angle,
+                                            speed=C.ARROW_SPEED, damage=actual_dmg,
+                                            color=C.C_ARROW)
                         )
-                        if abs(diff) < math.pi / 3:  # front ±60° — immune
-                            actual_dmg = 0
-                        elif abs(diff) > math.pi * 2 / 3:  # back 120° — double
-                            actual_dmg = max(actual_dmg, arrow.damage * 2)
+                        enemy.take_hit(actual_dmg, self.particles)
+                        self.camera.add_shake(3)
+                        break
                     if actual_dmg > 0:
                         # Hunter's Mark: first enemy hit per room takes x3
                         if self.player.hunter_mark and not self.player._hunter_mark_used:
@@ -2493,6 +2582,12 @@ class Game:
         if self.state == "ARENA_SELECT":
             ui.draw_arena_select(
                 self.screen, _ARENA_ENTRIES, self._arena_selected, self._arena_count, focus=self._arena_focus
+            )
+            return
+
+        if self.state == "ARENA_RELIC_SELECT":
+            ui.draw_arena_relic_select(
+                self.screen, RELIC_POOL, self._arena_relic_selected, hovered=self._arena_relic_hovered
             )
             return
 

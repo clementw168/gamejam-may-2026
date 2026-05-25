@@ -58,15 +58,15 @@ uv run verdant-depths [--keys arrows|wasd|zqsd]
 |---|---|---|---|
 | GoblinRunner | melee chaser | all | `_steer_toward` wall-aware movement; HP 3+; 2 coins |
 | GoblinArcher | ranged | all | keeps distance, wind-up telegraph; floor-scaled |
-| Wolf | melee flanker | all | wobble + `_steer_toward` approach; lunge ≤130 px; 3 coins |
+| Wolf | melee flanker | all | wobble + `_steer_toward` approach; 175 px/s speed, 550 px/s lunge, 1.0 s CD; lunges at any range whenever CD ready; 2 coins |
 | SporePlant | stationary ranged | all | alternating 4-way volleys (0°/45°); HP 5+ |
 | SporeElder | stationary ranged elite | **5+** | 8-way simultaneous volleys + 6-spore cloud every 7 s; HP 18+; 7 coins |
-| **StoneCrawler** | armoured melee | **4+** | First 3 hits deflected; 2 dmg contact; `_steer_toward`; HP 8+; 4 coins |
+| **StoneCrawler** | armoured melee | **4+** | First 3 arrows deflected back at player at full `ARROW_SPEED`; 2 dmg contact; `_steer_toward`; HP 8+; 4 coins |
 | **VenomfangBat** | fast erratic melee | **4+** | Arc wobble + erratic wander blend; 1 dmg; HP 2; 3 coins |
-| **CrystalTurret** | stationary ranged | **5+** | Rotating 3-way volleys; immune front ±60°, ×2 dmg from back; HP 10+; 5 coins |
+| **CrystalTurret** | stationary ranged | **5+** | Rapid-fires fast aimed shots at player (380 px/s, 0.45 s CD, 0.25 s wind-up); HP 10+; 2 coins |
 | **ShadowWraith** | teleporting caster | **5+** | Teleports every 4 s; 2-way homing projectiles; HP 4; 5 coins |
-| **BoneArcher** | ranged | **6+** | 3-way spread; every 4th shot = bone spike (dmg 2); HP 4+; 4 coins |
-| **MagmaSlug** | slow melee | **6+** | 2 dmg contact; drops BurnPatch every 0.5 s (1 dmg/s); `_steer_toward`; HP 14+; 6 coins |
+| **BoneArcher** | ranged | **6+** | 3-way spread; every 4th shot = 3-way bone spike volley (dmg 2 each, slow, large); HP 4+; 4 coins |
+| **MagmaSlug** | slow melee | **6+** | 2 dmg contact; drops large BurnPatch (r=48) every 0.8 s (1 dmg/s, 8 s lifetime); `_steer_toward`; HP 14+; 6 coins |
 | **VoidShrieker** | fast erratic melee | **7** | Erratic wander blend; 8-way death burst; void flash on attack; HP 3; 6 coins |
 
 ### Enemy movement system (`enemies.py`)
