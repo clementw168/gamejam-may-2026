@@ -127,9 +127,9 @@ def _hunters_mark(p: Player) -> None:
 
 
 def _void_core(p: Player) -> None:
-    """Every 10 s, emit a damaging 8-way pulse from the player's position."""
+    """Every 5 s, emit a damaging 8-way pulse from the player's position."""
     p.void_core = True
-    p._void_t = 10.0  # schedule first pulse
+    p._void_t = 5.0  # schedule first pulse
 
 
 # ── Pool ──────────────────────────────────────────────────────────────────────
@@ -178,5 +178,5 @@ RELIC_POOL: list[Relic] = [
     ),
     Relic("petrified_heart", "Petrified Heart", "Cannot over-heal. Take 50 % less damage.", "🗿", _petrified_heart),
     Relic("hunters_mark", "Hunter's Mark", "The first enemy hit per room takes 3× damage.", "🎯", _hunters_mark),
-    Relic("void_core", "Void Core", "Every 10 s, emit a damaging 8-way pulse.", "🌑", _void_core),
+    Relic("void_core", "Void Core", "Every 5 s, emit a damaging 8-way pulse.", "🌑", _void_core),
 ]

@@ -46,6 +46,7 @@ class Player:
         self._dash_timer = 0.0
         self._dash_cd = 0.0
         self._dash_dir = pygame.Vector2(1, 0)
+        self._dash_just_triggered = False  # set in _try_dash, consumed by Temporal Blur clone spawner
 
         # Shoot state
         self._shoot_cd = 0.0
@@ -92,8 +93,8 @@ class Player:
         self._petrified_acc: float = 0.0  # accumulates 0.5× damage; triggers when ≥1
         self.hunter_mark: bool = False  # first hit per room ×3
         self._hunter_mark_used: bool = False  # cleared per room
-        self.void_core: bool = False  # 8-way pulse every 10 s
-        self._void_t: float = 10.0  # countdown to next pulse
+        self.void_core: bool = False  # 8-way pulse every 5 s
+        self._void_t: float = 5.0  # countdown to next pulse
         self._void_queue: list = []  # (x, y, angle) tuples for game.py
 
         # Shrapnel tips — dead wall-hit arrow positions for game.py
@@ -131,6 +132,7 @@ class Player:
             d = d.normalize()
         self._dash_dir = d
         self._dashing = True
+        self._dash_just_triggered = True
         self._dash_timer = self.dash_duration
         self._dash_cd = self.dash_cooldown
         sounds.play("dash")
@@ -180,11 +182,11 @@ class Player:
                 self._bloodlust_t = 0.0
                 self._bloodlust_stacks = 0
 
-        # Void Core — 8-way pulse every 10 s (queued for game.py to spawn)
+        # Void Core — 8-way pulse every 5 s (queued for game.py to spawn)
         if self.void_core:
             self._void_t -= dt
             if self._void_t <= 0:
-                self._void_t = 10.0
+                self._void_t = 5.0
                 for i in range(8):
                     self._void_queue.append((self.x, self.y, i * math.pi / 4))
 

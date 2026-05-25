@@ -613,33 +613,79 @@ def _spawn_wave(
     return wave
 
 
-def _spawn_boss(room: Room, floor: int) -> list[Enemy]:
-    """Spawn the floor-appropriate boss at the centre of the boss room."""
+def _spawn_boss(room: Room, floor: int, *, cx: float | None = None, cy: float | None = None) -> list[Enemy]:
+    """Spawn the floor-appropriate boss.
 
-    if floor <= 2:
-        radius = float(C.SHAMAN_RADIUS)
-        cx, cy = room.find_spawn_near_centre(radius)
-        return [GoblinShaman(cx, cy, floor=floor)]
+    If *cx*/*cy* are omitted the boss is placed at the room centre (campaign
+    use). Pass explicit coordinates to place it anywhere (endless combos).
+    """
+
+    def _centre(radius: float) -> tuple[float, float]:
+        if cx is not None and cy is not None:
+            return cx, cy
+        return room.find_spawn_near_centre(radius)
+
+    if floor == 1:
+        bx, by = _centre(float(C.SHAMAN_RADIUS))
+        return [GoblinShaman(bx, by, floor=1)]
+    if floor == 2:
+        bx, by = _centre(float(C.SHAMAN_RADIUS))
+        offset = 60
+        return [
+            GoblinShaman(bx - offset, by, floor=2),
+            GoblinShaman(bx + offset, by, floor=2),
+        ]
     if floor == 3:
-        radius = float(C.TREE_RADIUS)
-        cx, cy = room.find_spawn_near_centre(radius)
-        return [AncientTree(cx, cy)]
+        bx, by = _centre(float(C.TREE_RADIUS))
+        return [AncientTree(bx, by)]
     if floor == 4:
-        radius = float(C.WARDEN_RADIUS)
-        cx, cy = room.find_spawn_near_centre(radius)
-        return [IronWarden(cx, cy)]
+        bx, by = _centre(float(C.WARDEN_RADIUS))
+        return [IronWarden(bx, by)]
     if floor == 5:
-        radius = float(C.LEECH_RADIUS)
-        cx, cy = room.find_spawn_near_centre(radius)
-        return [AbyssalLeech(cx, cy)]
+        bx, by = _centre(float(C.LEECH_RADIUS))
+        return [AbyssalLeech(bx, by)]
     if floor == 6:
-        radius = float(C.MATRIARCH_RADIUS)
-        cx, cy = room.find_spawn_near_centre(radius)
-        return [FungalMatriarch(cx, cy, floor=floor)]
+        bx, by = _centre(float(C.MATRIARCH_RADIUS))
+        return [FungalMatriarch(bx, by, floor=floor)]
     # floor 7+
-    radius = float(C.SOVEREIGN_RADIUS)
-    cx, cy = room.find_spawn_near_centre(radius)
-    return [VoidSovereign(cx, cy)]
+    bx, by = _centre(float(C.SOVEREIGN_RADIUS))
+    return [VoidSovereign(bx, by)]
+
+
+def _endless_boss_wave(room: Room, wave: int) -> list[Enemy]:
+    """Return the enemy list for an endless boss wave, scaling with generation.
+
+    Generation is how many full 7-boss rotations have been completed:
+      Gen 0 (waves  5–35): 1 boss  — the slot's boss alone
+      Gen 1 (waves 40–70): 2 bosses — slot + next in rotation
+      Gen 2+ (waves 75+):  3 bosses — slot + next two (capped at 3)
+
+    Bosses within a combo are spread across the room so they don't stack.
+    """
+    cycle = (wave - 1) // 5          # 0-indexed full wave count
+    generation = cycle // 7          # how many complete rotations done
+    slot = cycle % 7                 # position within the current rotation
+    n_bosses = min(3, generation + 1)
+
+    # Boss floors for this wave: current slot, then successive slots mod 7
+    floors = [(slot + i) % 7 + 1 for i in range(n_bosses)]
+
+    if n_bosses == 1:
+        return _spawn_boss(room, floors[0])
+
+    # Get spread positions; fall back to manual horizontal spread if needed
+    positions = room.get_spawn_positions(n_bosses, min_dist_from_centre=100.0)
+    if len(positions) < n_bosses:
+        rcx = C.ROOM_PIXEL_W / 2.0
+        rcy = C.ROOM_PIXEL_H / 2.0
+        step = 140
+        start = rcx - step * (n_bosses - 1) / 2
+        positions = [(start + i * step, rcy) for i in range(n_bosses)]
+
+    enemies: list[Enemy] = []
+    for floor, (bx, by) in zip(floors, positions):
+        enemies.extend(_spawn_boss(room, floor, cx=bx, cy=by))
+    return enemies
 
 
 # ── Game ───────────────────────────────────────────────────────────────────────
@@ -739,6 +785,10 @@ class Game:
 
         # Spiked Shell pulse ring (80 px radius shockwave when it triggers)
         self._spiked_shell_flash_t: float = 0.0
+
+        # DoT accumulators (burn patches + Matriarch aura)
+        self._burn_dot_acc: float = 0.0
+        self._mat_aura_acc: float = 0.0
 
         # Run statistics (accumulate across floors)
         self._run_start: float = time.monotonic()
@@ -1148,7 +1198,8 @@ class Game:
     ) -> None:
         """Temporal Blur clones, Shrapnel Tips, Phase Cloak / Iron Lungs — called right after player.update."""
         p = self.player
-        if p.temporal_blur and not was_dashing and p._dashing:
+        if p.temporal_blur and p._dash_just_triggered:
+            p._dash_just_triggered = False
             for _ in range(2):
                 self._blur_clones.append({"x": prev_px, "y": prev_py, "charges": 1})
         if p.shrapnel_tips:
@@ -1297,9 +1348,6 @@ class Game:
                         if p.arrow_poison:
                             enemy._poison_t = max(enemy._poison_t, 4.0)
                     self.camera.add_shake(3)
-                    if getattr(enemy, "phase2_just_triggered", False):
-                        enemy.phase2_just_triggered = False
-                        self.camera.add_shake(getattr(enemy, "_phase2_shake", 14))
                     if not enemy.alive:
                         self._on_enemy_killed(enemy, drop_coins=drop_coins)
 
@@ -1545,10 +1593,7 @@ class Game:
         px, py = self.player.x, self.player.y
 
         if wave % 5 == 0:
-            # Boss wave: cycle through the 7 bosses then repeat
-            cycle = (wave - 1) // 5  # 0-indexed (wave 5 → 0, wave 10 → 1 …)
-            boss_floor = (cycle % 7) + 1
-            self.enemies = _spawn_boss(room, boss_floor)
+            self.enemies = _endless_boss_wave(room, wave)
         else:
             cycle = (wave - 1) // 5
             pos = (wave - 1) % 5  # 0–3 for regular waves within a cycle
@@ -2197,17 +2242,17 @@ class Game:
             or self.state in _endless_states
         )
         if show_boss_hp:
-            boss_e = next(
-                (e for e in self.enemies if getattr(e, "is_boss_enemy", False)),
-                None,
-            )
-            if boss_e is not None:
+            boss_enemies = [e for e in self.enemies if getattr(e, "is_boss_enemy", False)]
+            if boss_enemies:
+                boss_e = boss_enemies[0]
+                total_hp = sum(e.hp for e in boss_enemies)
+                total_max_hp = sum(e.max_hp for e in boss_enemies)
                 ui.draw_boss_hpbar(
                     self.screen,
                     boss_e.boss_name,
-                    boss_e.hp,
-                    boss_e.max_hp,
-                    phase2=getattr(boss_e, "_phase2", False),
+                    total_hp,
+                    total_max_hp,
+                    phase2=False,
                 )
 
         # ── HUD ───────────────────────────────────────────────────────────────

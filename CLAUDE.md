@@ -103,8 +103,8 @@ All bosses: `is_boss_enemy = True`, `boss_name`, `_phase2` property, `phase2_jus
 | Boss | Floor | HP | Key attacks | Phase 2 change |
 |---|---|---|---|---|
 | **Goblin Shaman** | 1–2 | 20/26 | 3-way bolt burst + 2 runner summons | 5-way burst, summons archer, pulsing aura |
-| **Ancient Tree** | 3 | 30 | 4-way root burst + 8-thorn ring; stationary | 8-way roots, double thorn ring, faster CDs |
-| **Iron Warden** | 4 | 40 | Stomp AoE (60 px) + 4-way shrapnel; patrols | Stomp CD halved, 8-way shrapnel, charge dash |
+| **Ancient Tree** | 3 | 30 | 6-root spray (300° arc, random jitter, aimed at player) + 10-thorn ring (random rotation offset) + 3-shot aimed burst; stationary | 9 roots, 14+14-thorn double ring, 5-shot burst, faster CDs |
+| **Iron Warden** | 4 | 40 | Stomp AoE (60 px, 1.0s CD) + 4-way shrapnel; patrols | Stomp CD 0.6s, 8-way shrapnel |
 | **Abyssal Leech** | 5 | 35 | 3 homing tendrils (heals 3 HP if hit) + 6-way burst; stationary P1 | Moves, 6 tendrils, burst CD halved |
 | **Fungal Matriarch** | 6 | 50 | 5-way spore volley + SporeElder summons; passive 0.5 HP/s aura ≤80 px | Faster fire, alternates SporeElder/VenomfangBat summons |
 | **Void Sovereign** | 7 | 70 | 5-way burst + 2× ShadowWraith summons; orbits | 8-way burst, VoidShrieker summons, void-field border shrinks arena |
@@ -194,7 +194,7 @@ Pick 1 of 2 offered after each floor boss (`RELIC` state between `FLOOR_CLEAR` a
 | Curse of Greed | 💀 | Enemies drop 2× coins; start each floor with 0 coins |
 | Petrified Heart | 🗿 | Cannot overheal; take 50% less damage |
 | Hunter's Mark | 🎯 | First enemy hit per room takes ×3 damage |
-| Void Core | 🌑 | Every 10 s, emit damaging 8-way pulse from player |
+| Void Core | 🌑 | Every 5 s, emit damaging 8-way pulse from player |
 
 ## Shop
 
@@ -232,7 +232,7 @@ Accessible from the main menu with `E`. No coins, no shop, no floor structure �
 ### Difficulty scaling
 - Virtual floor = `min(7, 1 + cycle)` where cycle is 0-indexed (wave 1–5 = cycle 0, wave 6–10 = cycle 1 …)
 - Room depth = `min(3, position_in_cycle + 1)` → enemy composition uses existing `_spawn_wave(room, vfloor, depth)`
-- Boss waves cycle through all 7 campaign bosses then repeat
+- Boss waves scale by **generation** (complete 7-boss rotations): gen 0 = 1 boss, gen 1 = 2 bosses, gen 2+ = 3 bosses (capped). Each wave picks `slot = cycle % 7` and spawns floors `[slot+1, (slot+1)%7+1, …]` spread across the room.
 - After cycle 6 (wave 35+), difficulty stays at max floor 7 with room_depth=3
 
 ### Starting from a higher wave

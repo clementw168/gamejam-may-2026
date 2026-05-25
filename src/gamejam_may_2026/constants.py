@@ -113,14 +113,13 @@ SPORE_DAMAGE = 1
 
 # ── Boss: Goblin Shaman (floors 1–2) ─────────────────────────────────────────
 SHAMAN_HP = 20
-SHAMAN_HP_F2 = 26
 SHAMAN_RADIUS = 22
 SHAMAN_SPEED = 50
 SHAMAN_COIN_DROP = 10
-SHAMAN_BOLT_CD = 2.2  # s between bolt volleys (phase 1)
-SHAMAN_BOLT_CD_P2 = 1.5  # phase 2
-SHAMAN_SUMMON_CD = 10.0  # s between minion summons (phase 1)
-SHAMAN_SUMMON_CD_P2 = 6.0  # phase 2
+SHAMAN_BOLT_CD = 2.2   # s between bolt volleys
+SHAMAN_BOLT_NUM = 3    # arrows per volley
+SHAMAN_WIND_DUR = 0.50 # wind-up duration before firing
+SHAMAN_SUMMON_CD = 10.0  # s between minion summons
 
 C_SHAMAN = (165, 90, 210)
 C_SHAMAN_DARK = (100, 52, 138)
@@ -130,10 +129,12 @@ C_SHAMAN_BOLT = (205, 100, 255)
 TREE_HP = 30
 TREE_RADIUS = 30
 TREE_COIN_DROP = 15
-TREE_ROOT_CD = 2.5  # s between root volleys (phase 1)
-TREE_ROOT_CD_P2 = 1.8  # phase 2
-TREE_THORN_CD = 5.0  # s between thorn rings (phase 1)
-TREE_THORN_CD_P2 = 3.5  # phase 2
+TREE_ROOT_CD = 2.2    # s between root spray volleys (phase 1)
+TREE_ROOT_CD_P2 = 1.4 # phase 2
+TREE_THORN_CD = 4.5   # s between random thorn rings (phase 1)
+TREE_THORN_CD_P2 = 3.0 # phase 2
+TREE_AIM_CD = 3.5     # s between aimed bursts (phase 1)
+TREE_AIM_CD_P2 = 2.2  # phase 2
 
 C_TREE = (38, 80, 25)
 C_TREE_DARK = (22, 50, 14)
@@ -222,9 +223,9 @@ WARDEN_HP = 40
 WARDEN_RADIUS = 28
 WARDEN_SPEED = 60.0
 WARDEN_COIN_DROP = 18
-WARDEN_STOMP_CD = 4.0
-WARDEN_SHRAPNEL_CD = 5.0
-WARDEN_CHARGE_CD = 6.0  # P2 only
+WARDEN_STOMP_CD = 0.6
+WARDEN_STOMP_CD_P2 = 0.35
+WARDEN_SHRAPNEL_CD = 3.0
 
 C_WARDEN = (130, 110, 80)
 C_WARDEN_DARK = (75, 62, 42)
@@ -234,7 +235,7 @@ C_WARDEN_SPARK = (220, 185, 80)
 LEECH_HP = 35
 LEECH_RADIUS = 26
 LEECH_COIN_DROP = 20
-LEECH_TENDRIL_CD = 6.0
+LEECH_TENDRIL_CD = 3.5
 LEECH_BURST_CD = 5.0
 LEECH_SPEED_P2 = 30.0
 
@@ -246,7 +247,7 @@ C_LEECH_SHOT = (40, 185, 210)
 MATRIARCH_HP = 50
 MATRIARCH_RADIUS = 30
 MATRIARCH_COIN_DROP = 22
-MATRIARCH_SPORE_CD = 3.0
+MATRIARCH_SPORE_CD = 1.4
 MATRIARCH_SUMMON_CD = 12.0
 
 C_MATRIARCH = (80, 145, 45)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 
 # forward-declare Room to avoid circular imports at type-check time
 from typing import TYPE_CHECKING
@@ -142,6 +143,8 @@ class EnemyProjectile:
         damage: int | None = None,
         lifetime: float | None = None,
         radius: int | None = None,
+        wobble: float = 0.0,
+        wobble_freq: float = 3.0,
     ) -> None:
         self.x = x
         self.y = y
@@ -154,12 +157,28 @@ class EnemyProjectile:
         self.color = color if color is not None else C.C_ENEMY_PROJ
         self.radius = radius if radius is not None else 6
         self.alive = True
+        # Sinusoidal wobble: each frame rotates velocity by sin(t*freq)*amp*dt.
+        # Random starting phase ensures each projectile in a volley curves
+        # differently, making the pattern unpredictable.
+        self._wobble_amp: float = wobble
+        self._wobble_freq: float = wobble_freq
+        self._wobble_t: float = random.uniform(0.0, math.pi * 2) if wobble else 0.0
 
     def update(self, dt: float, room: Room) -> None:
         self.lifetime -= dt
         if self.lifetime <= 0:
             self.alive = False
             return
+
+        if self._wobble_amp:
+            rotate = math.sin(self._wobble_t * self._wobble_freq) * self._wobble_amp * dt
+            self._wobble_t += dt
+            cos_r = math.cos(rotate)
+            sin_r = math.sin(rotate)
+            self.vx, self.vy = (
+                self.vx * cos_r - self.vy * sin_r,
+                self.vx * sin_r + self.vy * cos_r,
+            )
 
         self.x += self.vx * dt
         self.y += self.vy * dt

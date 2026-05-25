@@ -555,8 +555,7 @@ class GoblinShaman(Enemy):
     _DEATH_COLOR_B = (220, 160, 255)
 
     def __init__(self, x: float, y: float, *, floor: int = 1) -> None:
-        hp = C.SHAMAN_HP if floor == 1 else C.SHAMAN_HP_F2
-        super().__init__(x, y, hp=hp, radius=C.SHAMAN_RADIUS, speed=C.SHAMAN_SPEED, coin_drop=C.SHAMAN_COIN_DROP)
+        super().__init__(x, y, hp=C.SHAMAN_HP, radius=C.SHAMAN_RADIUS, speed=C.SHAMAN_SPEED, coin_drop=C.SHAMAN_COIN_DROP)
         self.floor = floor
         # Minion-summon queue — game.py drains this each frame
         self._summon_queue: list[Enemy] = []
@@ -572,19 +571,10 @@ class GoblinShaman(Enemy):
         # Visual
         self._bob_t = random.uniform(0.0, 6.28)
         self._staff_angle = -math.pi / 3
-        self._phase2_done = False  # flag to fire phase-2 burst once
 
-    @property
-    def _phase2(self) -> bool:
-        return self.hp <= self.max_hp // 2
-
-    # Override take_hit so game.py can detect the phase-2 transition
+    # Override take_hit to emit death particles
     def take_hit(self, damage: int, particles: ParticleSystem) -> None:
-        was_p2 = self._phase2
         super().take_hit(damage, particles)
-        if not was_p2 and self._phase2 and self.alive:
-            self.phase2_just_triggered = True
-            particles.emit_shaman_phase2(self.x, self.y)
         if not self.alive:
             particles.emit_shaman_death(self.x, self.y)
 
@@ -618,22 +608,19 @@ class GoblinShaman(Enemy):
             self._staff_angle = math.atan2(dy, dx)
 
         # ── Bolt volley ───────────────────────────────────────────────────────
-        bolt_cd = C.SHAMAN_BOLT_CD_P2 if self._phase2 else C.SHAMAN_BOLT_CD
-        wind_dur = 0.35 if self._phase2 else 0.50
         self._bolt_cd -= dt
 
-        if self._bolt_cd <= wind_dur and not self._winding:
+        if self._bolt_cd <= C.SHAMAN_WIND_DUR and not self._winding:
             self._winding = True
             self._wind_up = 0.0
 
         if self._winding:
             self._wind_up += dt
-            if self._wind_up >= wind_dur:
-                num = 5 if self._phase2 else 3
-                spread = math.radians(40 if self._phase2 else 25)
+            if self._wind_up >= C.SHAMAN_WIND_DUR:
                 base = math.atan2(dy, dx)
-                step = spread * 2 / max(1, num - 1)
-                for i in range(num):
+                spread = math.radians(25)
+                step = spread * 2 / max(1, C.SHAMAN_BOLT_NUM - 1)
+                for i in range(C.SHAMAN_BOLT_NUM):
                     a = base - spread + i * step
                     projs.append(
                         EnemyProjectile(
@@ -647,37 +634,26 @@ class GoblinShaman(Enemy):
                         )
                     )
                 sounds.play("spore_shoot")
-                self._bolt_cd = bolt_cd
+                self._bolt_cd = C.SHAMAN_BOLT_CD
                 self._winding = False
                 self._wind_up = 0.0
 
         # ── Minion summon ─────────────────────────────────────────────────────
-        summon_cd = C.SHAMAN_SUMMON_CD_P2 if self._phase2 else C.SHAMAN_SUMMON_CD
         self._summon_cd -= dt
         if self._summon_cd <= 0:
-            n_pos = 3 if self._phase2 else 2
-            positions = room.get_spawn_positions(n_pos, min_dist_from_centre=150.0)
-            for i, pos in enumerate(positions):
-                if i < 2:
-                    self._summon_queue.append(GoblinRunner(*pos, floor=self.floor))
-                else:
-                    self._summon_queue.append(GoblinArcher(*pos))
+            positions = room.get_spawn_positions(2, min_dist_from_centre=150.0)
+            for pos in positions:
+                self._summon_queue.append(GoblinRunner(*pos, floor=self.floor))
             particles.emit_summon_flash(self.x, self.y)
-            self._summon_cd = summon_cd
+            self._summon_cd = C.SHAMAN_SUMMON_CD
 
     def draw(self, surf: pygame.Surface, camera: Camera) -> None:
         sx, sy = camera.apply_pos(self.x, self.y)
         sx, sy = round(sx), round(sy)
 
-        # Phase-2 aura (pulsing ring)
-        if self._phase2:
-            pulse = (math.sin(self._bob_t * 3.5) + 1) * 0.5
-            ring_r = self.radius + 8 + round(pulse * 6)
-            pygame.draw.circle(surf, (180, 70, 255), (sx, sy), ring_r, 2)
-
         # Wind-up glow
         if self._winding:
-            frac = self._wind_up / (0.35 if self._phase2 else 0.50)
+            frac = self._wind_up / C.SHAMAN_WIND_DUR
             glow = self.radius + round(frac * 20)
             col = (min(255, round(165 + frac * 90)), min(255, round(90 + frac * 50)), 210)
             pygame.draw.circle(surf, col, (sx, sy), glow, 3)
@@ -716,16 +692,22 @@ class AncientTree(Enemy):
     def __init__(self, x: float, y: float) -> None:
         super().__init__(x, y, hp=C.TREE_HP, radius=C.TREE_RADIUS, speed=0.0, coin_drop=C.TREE_COIN_DROP)
 
-        # Root burst
+        # Root spray (wide arc toward player, random jitter per shot)
         self._root_cd = C.TREE_ROOT_CD
-        self._root_rot = 0.0  # alternates 0° / 45°
         self._root_winding = False
         self._root_wind_up = 0.0
 
-        # Thorn ring
+        # Thorn ring (random rotation offset each fire)
         self._thorn_cd = C.TREE_THORN_CD
         self._thorn_winding = False
         self._thorn_wind_up = 0.0
+        self._thorn_ring_offset = 0.0  # locked in when wind-up starts
+
+        # Aimed burst (new — tracks player, forces movement)
+        self._aim_cd = C.TREE_AIM_CD * random.uniform(0.6, 1.0)  # staggered first shot
+        self._aim_winding = False
+        self._aim_wind_up = 0.0
+        self._aim_angle = 0.0  # locked in when wind-up starts
 
         # Visual
         self._pulse_t = random.uniform(0.0, 6.28)
@@ -761,26 +743,33 @@ class AncientTree(Enemy):
         if self.tick_status(dt, particles):
             return
 
-        # ── Root burst ────────────────────────────────────────────────────────
+        dx = player.x - self.x
+        dy = player.y - self.y
+        player_angle = math.atan2(dy, dx)
+
+        # ── Root spray ────────────────────────────────────────────────────────
+        # Wide arc (~300°) aimed roughly at the player; each shot has random
+        # jitter so the gaps are never in the same place twice.
         root_cd = C.TREE_ROOT_CD_P2 if self._phase2 else C.TREE_ROOT_CD
-        wind_dur = 0.70
+        root_wind = 0.65
         self._root_cd -= dt
 
-        if self._root_cd <= wind_dur and not self._root_winding:
+        if self._root_cd <= root_wind and not self._root_winding:
             self._root_winding = True
             self._root_wind_up = 0.0
 
         if self._root_winding:
             self._root_wind_up += dt
-            if self._root_wind_up >= wind_dur:
-                num = 8 if self._phase2 else 4
+            if self._root_wind_up >= root_wind:
+                num = 9 if self._phase2 else 6
+                arc = math.radians(300)
                 for i in range(num):
-                    angle = math.radians(self._root_rot + i * (360.0 / num))
+                    frac = i / num
+                    jitter = random.uniform(-0.18, 0.18)
+                    a = player_angle - arc / 2 + frac * arc + jitter
                     projs.append(
                         EnemyProjectile(
-                            self.x,
-                            self.y,
-                            angle,
+                            self.x, self.y, a,
                             speed=C.SPORE_SPEED,
                             color=C.C_TREE_ROOT,
                             damage=1,
@@ -788,54 +777,88 @@ class AncientTree(Enemy):
                         )
                     )
                 sounds.play("spore_shoot")
-                self._root_rot = 45.0 if self._root_rot == 0.0 else 0.0
                 self._root_cd = root_cd
                 self._root_winding = False
                 self._root_wind_up = 0.0
 
         # ── Thorn ring ────────────────────────────────────────────────────────
+        # Locks in a random rotation offset at wind-up start so the ring is
+        # never aligned to cardinal / diagonal axes.
         thorn_cd = C.TREE_THORN_CD_P2 if self._phase2 else C.TREE_THORN_CD
-        wind_dur2 = 0.85
+        thorn_wind = 0.90
         self._thorn_cd -= dt
 
-        if self._thorn_cd <= wind_dur2 and not self._thorn_winding:
+        if self._thorn_cd <= thorn_wind and not self._thorn_winding:
             self._thorn_winding = True
             self._thorn_wind_up = 0.0
+            self._thorn_ring_offset = random.uniform(0.0, math.pi * 2)
 
         if self._thorn_winding:
             self._thorn_wind_up += dt
-            if self._thorn_wind_up >= wind_dur2:
-                for i in range(8):
-                    angle = math.radians(i * 45.0)
+            if self._thorn_wind_up >= thorn_wind:
+                num = 14 if self._phase2 else 10
+                for i in range(num):
+                    a = self._thorn_ring_offset + i * (math.pi * 2 / num)
                     projs.append(
                         EnemyProjectile(
-                            self.x,
-                            self.y,
-                            angle,
-                            speed=290,
+                            self.x, self.y, a,
+                            speed=300,
                             color=C.C_THORN,
                             damage=1,
                             lifetime=2.2,
                         )
                     )
                 if self._phase2:
-                    for i in range(8):
-                        angle = math.radians(22.5 + i * 45.0)
+                    # Second interleaved ring at half-step offset, slower
+                    for i in range(num):
+                        a = self._thorn_ring_offset + (i + 0.5) * (math.pi * 2 / num)
                         projs.append(
                             EnemyProjectile(
-                                self.x,
-                                self.y,
-                                angle,
-                                speed=220,
+                                self.x, self.y, a,
+                                speed=200,
                                 color=(160, 215, 65),
                                 damage=1,
-                                lifetime=2.2,
+                                lifetime=2.5,
                             )
                         )
                 sounds.play("wolf_lunge")
                 self._thorn_cd = thorn_cd
                 self._thorn_winding = False
                 self._thorn_wind_up = 0.0
+
+        # ── Aimed burst ───────────────────────────────────────────────────────
+        # Locks onto the player's position at wind-up start; fires a tight
+        # cluster of fast roots — forces movement even between the other attacks.
+        aim_cd = C.TREE_AIM_CD_P2 if self._phase2 else C.TREE_AIM_CD
+        aim_wind = 0.50
+        self._aim_cd -= dt
+
+        if self._aim_cd <= aim_wind and not self._aim_winding:
+            self._aim_winding = True
+            self._aim_wind_up = 0.0
+            self._aim_angle = player_angle  # lock target now
+
+        if self._aim_winding:
+            self._aim_wind_up += dt
+            if self._aim_wind_up >= aim_wind:
+                num = 5 if self._phase2 else 3
+                spread = math.radians(14)
+                for i in range(num):
+                    offset = (i - (num - 1) / 2) * spread
+                    projs.append(
+                        EnemyProjectile(
+                            self.x, self.y,
+                            self._aim_angle + offset,
+                            speed=340,
+                            color=C.C_TREE_ROOT,
+                            damage=1,
+                            lifetime=2.0,
+                        )
+                    )
+                sounds.play("spore_shoot")
+                self._aim_cd = aim_cd
+                self._aim_winding = False
+                self._aim_wind_up = 0.0
 
     def draw(self, surf: pygame.Surface, camera: Camera) -> None:
         sx, sy = camera.apply_pos(self.x, self.y)
@@ -851,17 +874,32 @@ class AncientTree(Enemy):
             ey = sy + round(math.sin(angle) * length)
             pygame.draw.line(surf, C.C_TREE_ROOT, (sx, sy), (ex, ey), 2)
 
-        # Root wind-up glow
+        # Root spray wind-up glow
         if self._root_winding:
-            frac = self._root_wind_up / 0.70
+            frac = self._root_wind_up / 0.65
             glow_r = r + round(frac * 20)
             pygame.draw.circle(surf, C.C_TREE_ROOT, (sx, sy), glow_r, 3)
 
-        # Thorn wind-up glow (outer ring, different colour)
+        # Thorn ring wind-up: draw preview spokes at the locked offset
         if self._thorn_winding:
-            frac = self._thorn_wind_up / 0.85
-            glow_r = r + round(frac * 30)
+            frac = self._thorn_wind_up / 0.90
+            glow_r = r + round(frac * 34)
             pygame.draw.circle(surf, C.C_THORN, (sx, sy), glow_r, 2)
+            num_preview = 14 if self._phase2 else 10
+            for i in range(num_preview):
+                a = self._thorn_ring_offset + i * (math.pi * 2 / num_preview)
+                ex = sx + round(math.cos(a) * glow_r)
+                ey = sy + round(math.sin(a) * glow_r)
+                pygame.draw.line(surf, C.C_THORN, (sx, sy), (ex, ey), 1)
+
+        # Aimed burst wind-up: directed line toward locked target angle
+        if self._aim_winding:
+            frac = self._aim_wind_up / 0.50
+            length = r + round(frac * 60)
+            col = (min(255, 88 + round(frac * 167)), min(255, 55 + round(frac * 30)), 20)
+            ex = sx + round(math.cos(self._aim_angle) * length)
+            ey = sy + round(math.sin(self._aim_angle) * length)
+            pygame.draw.line(surf, col, (sx, sy), (ex, ey), max(1, round(frac * 3)))
 
         # Shadow
         pygame.draw.circle(surf, (8, 8, 8), (sx + 3, sy + 6), r - 2)
@@ -1815,13 +1853,6 @@ class IronWarden(Enemy):
         self._shrapnel_winding: bool = False
         self._shrapnel_wind_up: float = 0.0
 
-        # Charge (P2 only)
-        self._charge_cd: float = C.WARDEN_CHARGE_CD
-        self._charge_telegraph_t: float = 0.0  # counts DOWN from 1.5
-        self._charge_dir: tuple[float, float] = (1.0, 0.0)
-        self._charging: bool = False
-        self._charge_timer: float = 0.0
-
         # Contact damage
         self._contact_cd: float = 0.0
 
@@ -1862,36 +1893,12 @@ class IronWarden(Enemy):
         dy = player.y - self.y
         dist = math.hypot(dx, dy)
 
-        # ── Charge (P2 only) ─────────────────────────────────────────────────
-        if self._phase2:
-            if not self._charging and self._charge_telegraph_t <= 0:
-                self._charge_cd -= dt
-            if self._charge_cd <= 0 and not self._charging and not self._stomp_winding and not self._shrapnel_winding:
-                # Begin telegraph
-                self._charge_cd = C.WARDEN_CHARGE_CD
-                self._charge_telegraph_t = 1.5
-                if dist > 0:
-                    self._charge_dir = (dx / dist, dy / dist)
-
-            if self._charge_telegraph_t > 0 and not self._charging:
-                self._charge_telegraph_t -= dt
-                if self._charge_telegraph_t <= 0:
-                    self._charging = True
-                    self._charge_timer = 0.25
-
-            if self._charging:
-                self._charge_timer -= dt
-                self._move(self._charge_dir[0] * 400.0 * dt, self._charge_dir[1] * 400.0 * dt, room)
-                if self._charge_timer <= 0:
-                    self._charging = False
-
         # ── Stomp ─────────────────────────────────────────────────────────────
-        stomp_cd = 2.0 if self._phase2 else C.WARDEN_STOMP_CD
-        _STOMP_WIND = 1.0
-        if not self._charging:
-            self._stomp_cd -= dt
+        stomp_cd = C.WARDEN_STOMP_CD_P2 if self._phase2 else C.WARDEN_STOMP_CD
+        _STOMP_WIND = 0.6
+        self._stomp_cd -= dt
 
-        if self._stomp_cd <= _STOMP_WIND and not self._stomp_winding and not self._charging:
+        if self._stomp_cd <= _STOMP_WIND and not self._stomp_winding:
             self._stomp_winding = True
             self._stomp_wind_up = 0.0
             self._stomp_target = (player.x, player.y)
@@ -1899,7 +1906,6 @@ class IronWarden(Enemy):
         if self._stomp_winding:
             self._stomp_wind_up += dt
             if self._stomp_wind_up >= _STOMP_WIND:
-                # Resolve: damage if player near target
                 self._stomp_ring_t = 0.35
                 if self._stomp_target:
                     tx, ty = self._stomp_target
@@ -1913,11 +1919,10 @@ class IronWarden(Enemy):
         self._stomp_ring_t = max(0.0, self._stomp_ring_t - dt)
 
         # ── Shrapnel ─────────────────────────────────────────────────────────
-        _SHRAP_WIND = 0.5
-        if not self._charging:
-            self._shrapnel_cd -= dt
+        _SHRAP_WIND = 0.3
+        self._shrapnel_cd -= dt
 
-        if self._shrapnel_cd <= _SHRAP_WIND and not self._shrapnel_winding and not self._charging:
+        if self._shrapnel_cd <= _SHRAP_WIND and not self._shrapnel_winding:
             self._shrapnel_winding = True
             self._shrapnel_wind_up = 0.0
 
@@ -1963,7 +1968,7 @@ class IronWarden(Enemy):
                 self._shrapnel_wind_up = 0.0
 
         # ── Patrol toward player ──────────────────────────────────────────────
-        if not self._charging and not self._stomp_winding and dist > 0:
+        if dist > 0:
             self._move(dx / dist * self.speed * dt, dy / dist * self.speed * dt, room)
 
         # ── Contact damage ────────────────────────────────────────────────────
@@ -1981,7 +1986,7 @@ class IronWarden(Enemy):
         if self._stomp_winding and self._stomp_target:
             tx2, ty2 = self._stomp_target
             stx, sty = camera.apply_pos(tx2, ty2)
-            frac = self._stomp_wind_up / 1.0
+            frac = self._stomp_wind_up / 0.6
             ring_r = 10 + round(frac * 50)
             pygame.draw.circle(surf, (220, 185, 80), (round(stx), round(sty)), ring_r, 3)
 
@@ -1995,15 +2000,6 @@ class IronWarden(Enemy):
             ring_surf = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4), pygame.SRCALPHA)
             pygame.draw.circle(ring_surf, (220, 185, 80, alpha), (ring_r + 2, ring_r + 2), ring_r, 3)
             surf.blit(ring_surf, (round(stx) - ring_r - 2, round(sty) - ring_r - 2))
-
-        # Charge telegraph arrow
-        if self._charge_telegraph_t > 0 and not self._charging:
-            progress = 1.0 - self._charge_telegraph_t / 1.5
-            arrow_len = 40 + round(progress * 60)
-            ex2 = sx + round(self._charge_dir[0] * arrow_len)
-            ey2 = sy + round(self._charge_dir[1] * arrow_len)
-            pygame.draw.line(surf, (255, 80, 30), (sx, sy), (ex2, ey2), 4)
-            pygame.draw.circle(surf, (255, 80, 30), (ex2, ey2), 6)
 
         # Phase-2 aura
         if self._phase2:
@@ -2236,7 +2232,7 @@ class FungalMatriarch(Enemy):
         dist = math.hypot(dx, dy)
 
         # ── Spore Volley (5-way fan) ──────────────────────────────────────────
-        spore_cd = 1.5 if self._phase2 else C.MATRIARCH_SPORE_CD
+        spore_cd = 0.7 if self._phase2 else C.MATRIARCH_SPORE_CD
         _WIND_DUR = 0.65
         self._spore_cd -= dt
 
@@ -2248,8 +2244,8 @@ class FungalMatriarch(Enemy):
             self._spore_wind_up += dt
             if self._spore_wind_up >= _WIND_DUR:
                 base_a = math.atan2(dy, dx) if dist > 0 else 0.0
-                for i in range(5):
-                    a = base_a + math.radians(-32 + i * 16)
+                for i in range(7):
+                    a = base_a + math.radians(-45 + i * 15)
                     projs.append(
                         EnemyProjectile(
                             self.x,
@@ -2259,6 +2255,8 @@ class FungalMatriarch(Enemy):
                             color=C.C_MATRIARCH_SPORE,
                             damage=1,
                             lifetime=C.SPORE_LIFETIME + 0.5,
+                            wobble=2.2,
+                            wobble_freq=2.8,
                         )
                     )
                 sounds.play("spore_shoot")
