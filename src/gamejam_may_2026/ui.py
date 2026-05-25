@@ -29,12 +29,30 @@ def _font(size: int, bold: bool = False) -> pygame.font.Font:
 
 
 # ── Heart shape helper ────────────────────────────────────────────────────────
-def _draw_heart(surf: pygame.Surface, cx: int, cy: int, size: int, filled: bool) -> None:
-    color = C.C_HEART_FULL if filled else C.C_HEART_EMPTY
-    # Diamond shape as heart stand-in (quick, readable)
+def _draw_heart(
+    surf: pygame.Surface,
+    cx: int,
+    cy: int,
+    size: int,
+    filled: bool,
+    half: bool = False,
+) -> None:
+    """Draw a diamond heart.
+
+    ``half=True`` draws the left half filled and the right half empty —
+    used to show pending half-damage from the Petrified Heart relic.
+    """
     s = size // 2
     points = [(cx, cy - s), (cx + s, cy), (cx, cy + s), (cx - s, cy)]
-    pygame.draw.polygon(surf, color, points)
+
+    if half:
+        # Draw full diamond with empty colour, then left triangle with full colour
+        pygame.draw.polygon(surf, C.C_HEART_EMPTY, points)
+        left_tri = [(cx, cy - s), (cx, cy + s), (cx - s, cy)]
+        pygame.draw.polygon(surf, C.C_HEART_FULL, left_tri)
+    else:
+        pygame.draw.polygon(surf, C.C_HEART_FULL if filled else C.C_HEART_EMPTY, points)
+
     pygame.draw.polygon(surf, (0, 0, 0), points, 1)
 
 
@@ -58,8 +76,12 @@ def draw_hud(
     # ── Hearts ────────────────────────────────────────────────────────────────
     heart_size = 30
     hx = 24
+    petrified = getattr(player, "petrified_heart", False)
+    petrified_acc = getattr(player, "_petrified_acc", 0.0)
+    # Show the rightmost filled heart as half when a pending half-hit is accumulated.
+    half_heart_idx = (player.hp - 1) if (petrified and petrified_acc >= 0.5) else -1
     for i in range(player.max_hp):
-        _draw_heart(surf, hx, cy, heart_size, i < player.hp)
+        _draw_heart(surf, hx, cy, heart_size, i < player.hp, half=i == half_heart_idx)
         hx += 38
 
     # ── Coin counter ──────────────────────────────────────────────────────────

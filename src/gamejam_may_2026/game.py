@@ -737,6 +737,9 @@ class Game:
         # VoidShrieker void-flash vignette
         self._void_flash_t: float = 0.0
 
+        # Spiked Shell pulse ring (80 px radius shockwave when it triggers)
+        self._spiked_shell_flash_t: float = 0.0
+
         # Run statistics (accumulate across floors)
         self._run_start: float = time.monotonic()
         self._rooms_cleared_total: int = 0
@@ -1124,6 +1127,7 @@ class Game:
         self._show_staircase = False
         self._staircase_t = 0.0
         self._void_flash_t = 0.0
+        self._spiked_shell_flash_t = 0.0
         self._burn_dot_acc = 0.0
         self._mat_aura_acc = 0.0
         self._pre_pause_state = "ARENA"
@@ -1137,18 +1141,36 @@ class Game:
 
         self.state = "ARENA"
 
-    def _update_arena(self, dt: float) -> None:
-        """Simplified gameplay loop for the arena (no items, no progression)."""
-        room = self._room
+    # ── Shared combat helpers (arena / endless / playing) ─────────────────────
+
+    def _apply_post_player_effects(
+        self, dt: float, was_dashing: bool, prev_px: float, prev_py: float, drop_coins: bool = True
+    ) -> None:
+        """Temporal Blur clones, Shrapnel Tips, Phase Cloak / Iron Lungs — called right after player.update."""
         p = self.player
+        if p.temporal_blur and not was_dashing and p._dashing:
+            for _ in range(2):
+                self._blur_clones.append({"x": prev_px, "y": prev_py, "charges": 1})
+        if p.shrapnel_tips:
+            for wx, wy, wang in p._wall_hit_arrows:
+                refl_base = math.atan2(-math.sin(wang), -math.cos(wang))
+                for dang in (-0.52, 0.0, 0.52):
+                    shr = Arrow(wx, wy, refl_base + dang, speed=450, damage=1, lifetime=0.30)
+                    shr._is_shrapnel = True  # type: ignore[attr-defined]
+                    p.arrows.append(shr)
+        if p._dashing:
+            for e in self.enemies:
+                if e.alive and (e.x - p.x) ** 2 + (e.y - p.y) ** 2 < (e.radius + p.radius) ** 2:
+                    if p.phase_cloak:
+                        e._stun_t = max(e._stun_t, 0.8)
+                    if p.iron_lungs:
+                        e.take_hit(1, self.particles)
+                        if not e.alive:
+                            self._on_enemy_killed(e, drop_coins=drop_coins)
 
-        # ── Player ────────────────────────────────────────────────────────────
-        self.player.update(dt, room, self.particles)
-        if self.player.dead:
-            self.state = "ARENA_DEAD"
-            return
-
-        # ── Always block ALL door openings (sealed arena) ─────────────────────
+    def _seal_all_doors(self, room: Room) -> None:
+        """Block the player from passing through any door opening (sealed-room modes)."""
+        p = self.player
         ts = C.TILE_SIZE
         r = C.PLAYER_RADIUS
         margin = ts + r
@@ -1165,7 +1187,9 @@ class Game:
         if "E" in room.doors and p.x > C.ROOM_PIXEL_W - margin and ew_lo < p.y < ew_hi:
             p.x = C.ROOM_PIXEL_W - margin
 
-        # Void Sovereign P2 shrinking arena
+    def _clamp_void_sovereign(self) -> None:
+        """Shrink the player's allowed area when Void Sovereign P2 void-field is active."""
+        p = self.player
         for e in self.enemies:
             if getattr(e, "is_void_sovereign", False) and e.alive:
                 vm = getattr(e, "_void_margin", 0.0)
@@ -1174,13 +1198,12 @@ class Game:
                     p.y = max(vm + p.radius, min(C.ROOM_PIXEL_H - vm - p.radius, p.y))
                 break
 
-        self._void_flash_t = max(0.0, self._void_flash_t - dt)
-
-        # ── Enemies ───────────────────────────────────────────────────────────
+    def _update_enemies_and_drain_queues(self, dt: float, room: Room) -> None:
+        """Tick all enemies; drain summon, burn-patch, VoidShrieker, and Void Core queues."""
+        p = self.player
         for e in self.enemies:
-            e.update(dt, self.player, room, self.particles, self.enemy_projectiles)
-
-        # Drain summon queues (boss minions)
+            e.update(dt, p, room, self.particles, self.enemy_projectiles)
+        # Summon queues (boss minions)
         new_summons: list[Enemy] = []
         for e in self.enemies:
             q = getattr(e, "_summon_queue", None)
@@ -1188,16 +1211,14 @@ class Game:
                 new_summons.extend(q)
                 q.clear()
         self.enemies.extend(new_summons)
-
-        # Drain burn patch queues (MagmaSlug)
+        # Burn-patch queues (MagmaSlug)
         for e in self.enemies:
             pq = getattr(e, "_patch_queue", None)
             if pq:
                 for bx, by in pq:
                     self.burn_patches.append(BurnPatch(bx, by))
                 pq.clear()
-
-        # Drain VoidShrieker hit-shake + death-burst queues
+        # VoidShrieker hit-shake + death-burst queues
         for e in self.enemies:
             if getattr(e, "_hit_shake", False):
                 e._hit_shake = False  # type: ignore[attr-defined]
@@ -1207,31 +1228,42 @@ class Game:
             if dps:
                 self.enemy_projectiles.extend(dps)
                 dps.clear()
+        # Void Core relic — pulse queue → piercing arrows
+        for vx2, vy2, vangle in p._void_queue:
+            vcore_arrow = Arrow(vx2, vy2, vangle, speed=280, damage=p.arrow_damage, lifetime=0.6)
+            vcore_arrow.piercing = True
+            p.arrows.append(vcore_arrow)
+        p._void_queue.clear()
 
-        # Steer homing projectiles
+    def _dot_kill_sweep(self, drop_coins: bool = True) -> None:
+        """Process kill effects for enemies that died from DoT (poison/burn/bleed) this frame."""
+        for e in self.enemies:
+            if not e.alive:
+                self._on_enemy_killed(e, drop_coins=drop_coins)
+
+    def _steer_and_advance_projectiles(self, dt: float, room: Room) -> None:
+        """Rotate homing enemy projectiles toward the player, then advance all projectiles."""
+        p = self.player
         for ep in self.enemy_projectiles:
             if getattr(ep, "homing", False):
-                dx2 = self.player.x - ep.x
-                dy2 = self.player.y - ep.y
+                dx2 = p.x - ep.x
+                dy2 = p.y - ep.y
                 dist2 = math.hypot(dx2, dy2) or 1.0
-                tx = dx2 / dist2
-                ty = dy2 / dist2
+                tx, ty = dx2 / dist2, dy2 / dist2
                 spd = math.hypot(ep.vx, ep.vy) or 1.0
-                cx2 = ep.vx / spd
-                cy2 = ep.vy / spd
+                cx2, cy2 = ep.vx / spd, ep.vy / spd
                 turn = math.radians(180.0 * dt)
-                cross = cx2 * ty - cy2 * tx
-                dot = cx2 * tx + cy2 * ty
-                angle = max(-turn, min(turn, math.atan2(cross, dot)))
+                angle = max(-turn, min(turn, math.atan2(cx2 * ty - cy2 * tx, cx2 * tx + cy2 * ty)))
                 cos_a, sin_a = math.cos(angle), math.sin(angle)
                 ep.vx = (cx2 * cos_a - cy2 * sin_a) * spd
                 ep.vy = (cx2 * sin_a + cy2 * cos_a) * spd
-
         for ep in self.enemy_projectiles:
             ep.update(dt, room)
 
-        # ── Arrow ↔ enemy collisions ──────────────────────────────────────────
-        for arrow in self.player.arrows:
+    def _resolve_arrow_collisions(self, drop_coins: bool = True) -> None:
+        """Arrow ↔ enemy collisions with all perk/relic effects (Hunter's Mark, Venom, Echoing Shot…)."""
+        p = self.player
+        for arrow in p.arrows:
             if not arrow.alive:
                 continue
             for enemy in self.enemies:
@@ -1249,81 +1281,145 @@ class Game:
                     # StoneCrawler shell deflect — reflect arrow back at player
                     if isinstance(enemy, StoneCrawler) and enemy._iframes <= 0 and enemy._shell_hits > 0:
                         arrow.alive = False
-                        _ref_angle = math.atan2(self.player.y - enemy.y, self.player.x - enemy.x)
+                        _ref_angle = math.atan2(p.y - enemy.y, p.x - enemy.x)
                         self.enemy_projectiles.append(
                             EnemyProjectile(enemy.x, enemy.y, _ref_angle,
-                                            speed=C.ARROW_SPEED, damage=actual_dmg,
-                                            color=C.C_ARROW)
+                                            speed=C.ARROW_SPEED, damage=actual_dmg, color=C.C_ARROW)
                         )
                         enemy.take_hit(actual_dmg, self.particles)
                         self.camera.add_shake(3)
                         break
                     if actual_dmg > 0:
+                        if p.hunter_mark and not p._hunter_mark_used:
+                            actual_dmg *= 3
+                            p._hunter_mark_used = True
                         enemy.take_hit(actual_dmg, self.particles)
+                        if p.arrow_poison:
+                            enemy._poison_t = max(enemy._poison_t, 4.0)
                     self.camera.add_shake(3)
                     if getattr(enemy, "phase2_just_triggered", False):
                         enemy.phase2_just_triggered = False
                         self.camera.add_shake(getattr(enemy, "_phase2_shake", 14))
+                    if not enemy.alive:
+                        self._on_enemy_killed(enemy, drop_coins=drop_coins)
 
-        # ── Enemy projectile ↔ player collisions ──────────────────────────────
+    def _resolve_projectile_collisions(self, drop_coins: bool = True) -> None:
+        """Enemy projectile ↔ player: Temporal Blur interception, damage, Spiked Shell, Leech."""
+        p = self.player
         for ep in self.enemy_projectiles:
             if not ep.alive:
                 continue
-            if (ep.x - self.player.x) ** 2 + (ep.y - self.player.y) ** 2 < (C.PLAYER_RADIUS + 6) ** 2:
+            absorbed = False
+            for clone in self._blur_clones:
+                if (ep.x - clone["x"]) ** 2 + (ep.y - clone["y"]) ** 2 < 14**2:
+                    ep.alive = False
+                    clone["charges"] -= 1
+                    self.particles.emit_hit(ep.x, ep.y, 0)
+                    absorbed = True
+                    break
+            if absorbed:
+                continue
+            if (ep.x - p.x) ** 2 + (ep.y - p.y) ** 2 < (C.PLAYER_RADIUS + 6) ** 2:
                 ep.alive = False
-                if self.player.take_damage(ep.damage):
-                    self.particles.emit_player_hurt(self.player.x, self.player.y)
+                if p.take_damage(ep.damage):
+                    self.particles.emit_player_hurt(p.x, p.y)
                     self.camera.add_shake(6)
-                    # Abyssal Leech tendril healing
                     leech = getattr(ep, "leech_owner", None)
                     if leech is not None and leech.alive:
                         leech.hp = min(leech.max_hp, leech.hp + 3)
+                    self._resolve_spiked_shell(drop_coins)
 
-        # Drain VoidShrieker death-burst projectiles before removing dead enemies
+    def _resolve_spiked_shell(self, drop_coins: bool = True) -> None:
+        """If the player's spiked_shell_triggered flag is set, run the 80 px AoE and set the visual ring."""
+        p = self.player
+        if not p.spiked_shell_triggered:
+            return
+        p.spiked_shell_triggered = False
+        self._spiked_shell_flash_t = 0.35
+        for e in self.enemies:
+            if e.alive and (e.x - p.x) ** 2 + (e.y - p.y) ** 2 < 80**2:
+                e.take_hit(2, self.particles)
+                if not e.alive:
+                    self._on_enemy_killed(e, drop_coins=drop_coins)
+
+    def _prune_entities(self) -> None:
+        """Prune spent blur clones; drain late VoidShrieker bursts; remove dead enemies and projectiles."""
+        self._blur_clones = [c for c in self._blur_clones if c["charges"] > 0]
         for e in self.enemies:
             dps = getattr(e, "_death_projs", None)
             if dps:
                 self.enemy_projectiles.extend(dps)
                 dps.clear()
-
         self.enemies = [e for e in self.enemies if e.alive]
         self.enemy_projectiles = [ep for ep in self.enemy_projectiles if ep.alive]
 
-        # ── Burn patches ──────────────────────────────────────────────────────
-        _bda = getattr(self, "_burn_dot_acc", 0.0)
-        burn_overlap = any(patch.update(dt, self.player) for patch in self.burn_patches)
-        if burn_overlap:
+    def _collect_coins(self, dt: float) -> None:
+        """Pull coins toward player; trigger Coin-Fed Heart; track total collected."""
+        p = self.player
+        for coin in self.coins:
+            if coin.update(dt, p, self.particles):
+                sounds.play("coin")
+                self._coins_collected_total += 1
+                if p.coin_fed_heart:
+                    p._coin_fed_acc += 1
+                    if p._coin_fed_acc >= 100:
+                        p._coin_fed_acc = 0
+                        if p.hp < p.max_hp and not p.petrified_heart:
+                            p.hp += 1
+        self.coins = [c for c in self.coins if not c.collected]
+
+    def _update_burn_and_aura(self, dt: float) -> None:
+        """Tick MagmaSlug burn patches and Fungal Matriarch spore aura — deal player damage."""
+        p = self.player
+        _bda = self._burn_dot_acc
+        if any(patch.update(dt, p) for patch in self.burn_patches):
             _bda += dt
             if _bda >= 1.0:
                 _bda -= 1.0
-                if self.player.take_damage(1):
-                    self.particles.emit_player_hurt(self.player.x, self.player.y)
+                if p.take_damage(1):
+                    self.particles.emit_player_hurt(p.x, p.y)
                     self.camera.add_shake(4)
         else:
             _bda = max(0.0, _bda - dt * 0.5)
         self._burn_dot_acc = _bda
         self.burn_patches = [bp for bp in self.burn_patches if bp.alive]
-
-        # ── Fungal Matriarch passive spore aura ───────────────────────────────
-        _maa = getattr(self, "_mat_aura_acc", 0.0)
-        mat_overlap = any(
-            getattr(e, "_spore_cloud_passive", False)
-            and e.alive
-            and (self.player.x - e.x) ** 2 + (self.player.y - e.y) ** 2 < 80**2
-            for e in self.enemies
-        )
+        _maa = self._mat_aura_acc
+        mat_overlap = False
+        for e in self.enemies:
+            if getattr(e, "_spore_cloud_passive", False) and e.alive:
+                mat_overlap = (p.x - e.x) ** 2 + (p.y - e.y) ** 2 < 80**2
+                break
         if mat_overlap:
             _maa += dt * 0.5
             if _maa >= 1.0:
                 _maa -= 1.0
-                if self.player.take_damage(1):
-                    self.particles.emit_player_hurt(self.player.x, self.player.y)
+                if p.take_damage(1):
+                    self.particles.emit_player_hurt(p.x, p.y)
                     self.camera.add_shake(3)
         else:
             _maa = max(0.0, _maa - dt * 0.3)
         self._mat_aura_acc = _maa
 
-        # ── Arena clear check ─────────────────────────────────────────────────
+    def _update_arena(self, dt: float) -> None:
+        """Arena fight: one optional relic, no coins, no progression."""
+        room = self._room
+        p = self.player
+        prev_px, prev_py, was_dashing = p.x, p.y, p._dashing
+        p.update(dt, room, self.particles)
+        if p.dead:
+            self.state = "ARENA_DEAD"
+            return
+        self._apply_post_player_effects(dt, was_dashing, prev_px, prev_py, drop_coins=False)
+        self._seal_all_doors(room)
+        self._clamp_void_sovereign()
+        self._update_enemies_and_drain_queues(dt, room)
+        self._resolve_spiked_shell(drop_coins=False)
+        self._dot_kill_sweep(drop_coins=False)
+        self._steer_and_advance_projectiles(dt, room)
+        self._resolve_arrow_collisions(drop_coins=False)
+        self._resolve_projectile_collisions(drop_coins=False)
+        self._prune_entities()
+        self._update_burn_and_aura(dt)
         if not self.enemies:
             self.state = "ARENA_WIN"
 
@@ -1386,6 +1482,7 @@ class Game:
         self._show_staircase = False
         self._staircase_t = 0.0
         self._void_flash_t = 0.0
+        self._spiked_shell_flash_t = 0.0
         self._burn_dot_acc = 0.0
         self._mat_aura_acc = 0.0
         self._pre_pause_state = "ENDLESS"
@@ -1463,6 +1560,7 @@ class Game:
         self.burn_patches = []
         self._blur_clones = []
         self._void_flash_t = 0.0
+        self._spiked_shell_flash_t = 0.0
         self._burn_dot_acc = 0.0
         self._mat_aura_acc = 0.0
 
@@ -1531,293 +1629,26 @@ class Game:
             self._start_next_endless_wave()
 
     def _update_endless(self, dt: float) -> None:
-        """Endless mode combat loop — full relic/perk effects; no coins or chests."""
+        """Endless mode combat loop — full relic/perk effects, wave-based rewards."""
         room = self._room
         p = self.player
-
-        # ── Player ────────────────────────────────────────────────────────────
-        prev_px = p.x
-        prev_py = p.y
-        was_dashing = p._dashing
+        prev_px, prev_py, was_dashing = p.x, p.y, p._dashing
         p.update(dt, room, self.particles)
         if p.dead:
             self.state = "ENDLESS_DEAD"
             return
-
-        # Temporal Blur — spawn 2 clones at dash-start position
-        if p.temporal_blur and not was_dashing and p._dashing:
-            for _ in range(2):
-                self._blur_clones.append({"x": prev_px, "y": prev_py, "charges": 1})
-
-        # Shrapnel Tips — spawn 3 mini-shrapnel per wall-hit arrow
-        if p.shrapnel_tips:
-            for wx, wy, wang in p._wall_hit_arrows:
-                refl_base = math.atan2(-math.sin(wang), -math.cos(wang))
-                for dang in (-0.52, 0.0, 0.52):
-                    shr = Arrow(wx, wy, refl_base + dang, speed=450, damage=1, lifetime=0.30)
-                    shr._is_shrapnel = True  # type: ignore[attr-defined]
-                    p.arrows.append(shr)
-
-        # Phase Cloak / Iron Lungs — dash-through effects
-        if p._dashing:
-            for e in self.enemies:
-                if e.alive and (e.x - p.x) ** 2 + (e.y - p.y) ** 2 < (e.radius + p.radius) ** 2:
-                    if p.phase_cloak:
-                        e._stun_t = max(e._stun_t, 0.8)
-                    if p.iron_lungs:
-                        e.take_hit(1, self.particles)
-                        if not e.alive:
-                            self._drop_coins(e)
-
-        # ── Block ALL door openings (sealed arena) ────────────────────────────
-        ts = C.TILE_SIZE
-        r = C.PLAYER_RADIUS
-        margin = ts + r
-        ns_lo = (C.ROOM_TILE_W // 2 - 1) * ts - r
-        ns_hi = (C.ROOM_TILE_W // 2 + 2) * ts + r
-        ew_lo = (C.ROOM_TILE_H // 2 - 1) * ts - r
-        ew_hi = (C.ROOM_TILE_H // 2 + 2) * ts + r
-        if "N" in room.doors and p.y < margin and ns_lo < p.x < ns_hi:
-            p.y = margin
-        if "S" in room.doors and p.y > C.ROOM_PIXEL_H - margin and ns_lo < p.x < ns_hi:
-            p.y = C.ROOM_PIXEL_H - margin
-        if "W" in room.doors and p.x < margin and ew_lo < p.y < ew_hi:
-            p.x = margin
-        if "E" in room.doors and p.x > C.ROOM_PIXEL_W - margin and ew_lo < p.y < ew_hi:
-            p.x = C.ROOM_PIXEL_W - margin
-
-        # Void Sovereign P2 shrinking arena
-        for e in self.enemies:
-            if getattr(e, "is_void_sovereign", False) and e.alive:
-                vm = getattr(e, "_void_margin", 0.0)
-                if vm > 0:
-                    p.x = max(vm + p.radius, min(C.ROOM_PIXEL_W - vm - p.radius, p.x))
-                    p.y = max(vm + p.radius, min(C.ROOM_PIXEL_H - vm - p.radius, p.y))
-                break
-
-        self._void_flash_t = max(0.0, self._void_flash_t - dt)
-
-        # Void Core relic — drain pulse queue → piercing arrows
-        for vx2, vy2, vangle in p._void_queue:
-            vcore_arrow = Arrow(vx2, vy2, vangle, speed=280, damage=p.arrow_damage, lifetime=0.6)
-            vcore_arrow.piercing = True
-            p.arrows.append(vcore_arrow)
-        p._void_queue.clear()
-
-        # ── Enemies ───────────────────────────────────────────────────────────
-        for e in self.enemies:
-            e.update(dt, p, room, self.particles, self.enemy_projectiles)
-
-        # Drain summon queues (boss minions)
-        new_summons: list[Enemy] = []
-        for e in self.enemies:
-            q = getattr(e, "_summon_queue", None)
-            if q:
-                new_summons.extend(q)
-                q.clear()
-        self.enemies.extend(new_summons)
-
-        # Drain MagmaSlug burn-patch queues
-        for e in self.enemies:
-            pq = getattr(e, "_patch_queue", None)
-            if pq:
-                for bx, by in pq:
-                    self.burn_patches.append(BurnPatch(bx, by))
-                pq.clear()
-
-        # Drain VoidShrieker hit-shake + death-burst queues
-        for e in self.enemies:
-            if getattr(e, "_hit_shake", False):
-                e._hit_shake = False  # type: ignore[attr-defined]
-                self.camera.add_shake(4)
-                self._void_flash_t = max(self._void_flash_t, 0.25)
-            dps = getattr(e, "_death_projs", None)
-            if dps:
-                self.enemy_projectiles.extend(dps)
-                dps.clear()
-
-        # Steer homing projectiles
-        for ep in self.enemy_projectiles:
-            if getattr(ep, "homing", False):
-                dx2 = p.x - ep.x
-                dy2 = p.y - ep.y
-                dist2 = math.hypot(dx2, dy2) or 1.0
-                tx = dx2 / dist2
-                ty = dy2 / dist2
-                spd = math.hypot(ep.vx, ep.vy) or 1.0
-                cx2 = ep.vx / spd
-                cy2 = ep.vy / spd
-                turn = math.radians(180.0 * dt)
-                cross = cx2 * ty - cy2 * tx
-                dot = cx2 * tx + cy2 * ty
-                angle = max(-turn, min(turn, math.atan2(cross, dot)))
-                cos_a, sin_a = math.cos(angle), math.sin(angle)
-                ep.vx = (cx2 * cos_a - cy2 * sin_a) * spd
-                ep.vy = (cx2 * sin_a + cy2 * cos_a) * spd
-
-        for ep in self.enemy_projectiles:
-            ep.update(dt, room)
-
-        # ── Arrow ↔ enemy collisions ──────────────────────────────────────────
-        for arrow in p.arrows:
-            if not arrow.alive:
-                continue
-            for enemy in self.enemies:
-                if not enemy.alive:
-                    continue
-                if id(enemy) in arrow.hit_enemies:
-                    continue
-                if (arrow.x - enemy.x) ** 2 + (arrow.y - enemy.y) ** 2 < (enemy.radius + 5) ** 2:
-                    arrow.hit_enemies.add(id(enemy))
-                    if not arrow.piercing:
-                        arrow.alive = False
-                    actual_dmg = arrow.damage
-                    if getattr(arrow, "_overcharged", False):
-                        actual_dmg = arrow.damage * 3
-                    # StoneCrawler shell deflect — reflect arrow back at player
-                    if isinstance(enemy, StoneCrawler) and enemy._iframes <= 0 and enemy._shell_hits > 0:
-                        arrow.alive = False
-                        _ref_angle = math.atan2(p.y - enemy.y, p.x - enemy.x)
-                        self.enemy_projectiles.append(
-                            EnemyProjectile(enemy.x, enemy.y, _ref_angle,
-                                            speed=C.ARROW_SPEED, damage=actual_dmg,
-                                            color=C.C_ARROW)
-                        )
-                        enemy.take_hit(actual_dmg, self.particles)
-                        self.camera.add_shake(3)
-                        break
-                    if actual_dmg > 0:
-                        if p.hunter_mark and not p._hunter_mark_used:
-                            actual_dmg *= 3
-                            p._hunter_mark_used = True
-                        enemy.take_hit(actual_dmg, self.particles)
-                        if p.arrow_poison:
-                            enemy._poison_t = max(enemy._poison_t, 4.0)
-                    self.camera.add_shake(3)
-                    if getattr(enemy, "phase2_just_triggered", False):
-                        enemy.phase2_just_triggered = False
-                        self.camera.add_shake(getattr(enemy, "_phase2_shake", 14))
-                    if not enemy.alive:
-                        self._drop_coins(enemy)
-                        if p.echoing_shot:
-                            living = [e for e in self.enemies if e.alive and e is not enemy]
-                            if living:
-                                near = min(
-                                    living,
-                                    key=lambda e: (e.x - enemy.x) ** 2 + (e.y - enemy.y) ** 2,
-                                )
-                                if (near.x - enemy.x) ** 2 + (near.y - enemy.y) ** 2 < 300**2:
-                                    ea = math.atan2(near.y - enemy.y, near.x - enemy.x)
-                                    p.arrows.append(
-                                        Arrow(
-                                            enemy.x,
-                                            enemy.y,
-                                            ea,
-                                            speed=p.arrow_speed,
-                                            damage=p.arrow_damage,
-                                            piercing=p.piercing,
-                                        )
-                                    )
-                        if p.leech_stone:
-                            p._leech_kills += 1
-                            if p._leech_kills >= 50:
-                                p._leech_kills = 0
-                                if p.hp < p.max_hp:
-                                    p.hp += 1
-                        if p.bloodlust:
-                            p._bloodlust_stacks = min(3, p._bloodlust_stacks + 1)
-                            p._bloodlust_t = 3.0
-
-        # ── Enemy projectile ↔ player collisions ──────────────────────────────
-        for ep in self.enemy_projectiles:
-            if not ep.alive:
-                continue
-            # Temporal Blur clones intercept projectiles
-            absorbed = False
-            for clone in self._blur_clones:
-                if (ep.x - clone["x"]) ** 2 + (ep.y - clone["y"]) ** 2 < 14**2:
-                    ep.alive = False
-                    clone["charges"] -= 1
-                    self.particles.emit_hit(ep.x, ep.y, 0)
-                    absorbed = True
-                    break
-            if absorbed:
-                continue
-            if (ep.x - p.x) ** 2 + (ep.y - p.y) ** 2 < (C.PLAYER_RADIUS + 6) ** 2:
-                ep.alive = False
-                if p.take_damage(ep.damage):
-                    self.particles.emit_player_hurt(p.x, p.y)
-                    self.camera.add_shake(6)
-                    leech = getattr(ep, "leech_owner", None)
-                    if leech is not None and leech.alive:
-                        leech.hp = min(leech.max_hp, leech.hp + 3)
-                    if p.spiked_shell:
-                        for e in self.enemies:
-                            if e.alive and (e.x - p.x) ** 2 + (e.y - p.y) ** 2 < 80**2:
-                                e.take_hit(2, self.particles)
-                                if not e.alive:
-                                    self._drop_coins(e)
-
-        # Prune expired blur clones
-        self._blur_clones = [c for c in self._blur_clones if c["charges"] > 0]
-
-        # Drain VoidShrieker death-burst projectiles before removing dead enemies
-        for e in self.enemies:
-            dps = getattr(e, "_death_projs", None)
-            if dps:
-                self.enemy_projectiles.extend(dps)
-                dps.clear()
-
-        self.enemies = [e for e in self.enemies if e.alive]
-        self.enemy_projectiles = [ep for ep in self.enemy_projectiles if ep.alive]
-
-        # ── Burn patches ──────────────────────────────────────────────────────
-        _bda = getattr(self, "_burn_dot_acc", 0.0)
-        burn_overlap = any(patch.update(dt, p) for patch in self.burn_patches)
-        if burn_overlap:
-            _bda += dt
-            if _bda >= 1.0:
-                _bda -= 1.0
-                if p.take_damage(1):
-                    self.particles.emit_player_hurt(p.x, p.y)
-                    self.camera.add_shake(4)
-        else:
-            _bda = max(0.0, _bda - dt * 0.5)
-        self._burn_dot_acc = _bda
-        self.burn_patches = [bp for bp in self.burn_patches if bp.alive]
-
-        # ── Fungal Matriarch passive spore aura ───────────────────────────────
-        _maa = getattr(self, "_mat_aura_acc", 0.0)
-        mat_overlap = any(
-            getattr(e, "_spore_cloud_passive", False)
-            and e.alive
-            and (p.x - e.x) ** 2 + (p.y - e.y) ** 2 < 80**2
-            for e in self.enemies
-        )
-        if mat_overlap:
-            _maa += dt * 0.5
-            if _maa >= 1.0:
-                _maa -= 1.0
-                if p.take_damage(1):
-                    self.particles.emit_player_hurt(p.x, p.y)
-                    self.camera.add_shake(3)
-        else:
-            _maa = max(0.0, _maa - dt * 0.3)
-        self._mat_aura_acc = _maa
-
-        # ── Coins ─────────────────────────────────────────────────────────────
-        for coin in self.coins:
-            if coin.update(dt, p, self.particles):
-                sounds.play("coin")
-                if p.coin_fed_heart:
-                    p._coin_fed_acc += 1
-                    if p._coin_fed_acc >= 100:
-                        p._coin_fed_acc = 0
-                        if p.hp < p.max_hp and not p.petrified_heart:
-                            p.hp += 1
-        self.coins = [c for c in self.coins if not c.collected]
-
-        # ── Wave clear check ──────────────────────────────────────────────────
+        self._apply_post_player_effects(dt, was_dashing, prev_px, prev_py)
+        self._seal_all_doors(room)
+        self._clamp_void_sovereign()
+        self._update_enemies_and_drain_queues(dt, room)
+        self._resolve_spiked_shell()
+        self._dot_kill_sweep()
+        self._steer_and_advance_projectiles(dt, room)
+        self._resolve_arrow_collisions()
+        self._resolve_projectile_collisions()
+        self._prune_entities()
+        self._collect_coins(dt)
+        self._update_burn_and_aura(dt)
         if not self.enemies:
             self._endless_wave_complete()
 
@@ -1987,6 +1818,7 @@ class Game:
         self._staircase_t = 0.0
         self._ladder_ready = False
         self._void_flash_t = 0.0
+        self._spiked_shell_flash_t = 0.0
         self._burn_dot_acc = 0.0
 
         # Relic per-floor effects
@@ -2035,6 +1867,7 @@ class Game:
         if self._show_staircase:
             self._staircase_t += dt
         self._void_flash_t = max(0.0, self._void_flash_t - dt)
+        self._spiked_shell_flash_t = max(0.0, self._spiked_shell_flash_t - dt)
         if self.state == "PLAYING":
             self._update_playing(dt)
         elif self.state == "FLOOR_CLEAR":
@@ -2052,50 +1885,16 @@ class Game:
     def _update_playing(self, dt: float) -> None:
         dr = self._dr
         room = self._room
-
-        # Track dash state BEFORE player.update so we can detect the start of a dash
-        prev_px = self.player.x
-        prev_py = self.player.y
-        was_dashing = self.player._dashing
-
-        self.player.update(dt, room, self.particles)
-        if self.player.dead:
+        p = self.player
+        prev_px, prev_py, was_dashing = p.x, p.y, p._dashing
+        p.update(dt, room, self.particles)
+        if p.dead:
             self._finish_run()
             self.state = "DEAD"
             return
+        self._apply_post_player_effects(dt, was_dashing, prev_px, prev_py)
 
-        # Temporal Blur — spawn 2 clones at dash-start position
-        if self.player.temporal_blur and not was_dashing and self.player._dashing:
-            for _ in range(2):
-                self._blur_clones.append({"x": prev_px, "y": prev_py, "charges": 1})
-
-        # Shrapnel Tips — spawn 3 mini-shrapnel per wall-hit arrow
-        # _is_shrapnel flag prevents recursive chain: shrapnel hitting walls never spawn more shrapnel
-        if self.player.shrapnel_tips:
-            for wx, wy, wang in self.player._wall_hit_arrows:
-                refl_base = math.atan2(-math.sin(wang), -math.cos(wang))
-                for dang in (-0.52, 0.0, 0.52):  # ≈ ±30°
-                    shr = Arrow(wx, wy, refl_base + dang, speed=450, damage=1, lifetime=0.30)
-                    shr._is_shrapnel = True
-                    self.player.arrows.append(shr)
-
-        # Phase Cloak / Iron Lungs — dash-through effects
-        if self.player._dashing:
-            for e in self.enemies:
-                if e.alive and (
-                    (e.x - self.player.x) ** 2 + (e.y - self.player.y) ** 2 < (e.radius + self.player.radius) ** 2
-                ):
-                    if self.player.phase_cloak:
-                        e._stun_t = max(e._stun_t, 0.8)
-                    if self.player.iron_lungs:
-                        e.take_hit(1, self.particles)
-                        if not e.alive:
-                            self._drop_coins(e)
-
-        # ── Block locked doors ────────────────────────────────────────────────
-        # Locked = room not cleared (all doors) OR leading to boss-room while
-        # boss gate is up (that specific door only).
-        # Only clamp inside the door opening; tile walls handle all other edges.
+        # ── Block locked doors (boss-gate aware) ──────────────────────────────
         ts = C.TILE_SIZE
         r = C.PLAYER_RADIUS
         margin = ts + r  # 32 + 12 = 44 px — natural wall-face stop distance
@@ -2103,12 +1902,10 @@ class Game:
         ns_hi = (C.ROOM_TILE_W // 2 + 2) * ts + r  # 716 px
         ew_lo = (C.ROOM_TILE_H // 2 - 1) * ts - r  # 276 px  (E/W door y-span)
         ew_hi = (C.ROOM_TILE_H // 2 + 2) * ts + r  # 396 px
-        p = self.player
-
         locked = set(room.doors) if not dr.cleared else (self._boss_locked_doors() & set(room.doors))
         if "N" in locked and p.y < margin and ns_lo < p.x < ns_hi:
             p.y = margin
-            if dr.cleared:  # boss gate bump — show hint
+            if dr.cleared:
                 self._boss_hint_t = 2.5
                 self._boss_hint_dir = "N"
         if "S" in locked and p.y > C.ROOM_PIXEL_H - margin and ns_lo < p.x < ns_hi:
@@ -2127,252 +1924,21 @@ class Game:
                 self._boss_hint_t = 2.5
                 self._boss_hint_dir = "E"
 
-        # ── Void Sovereign: shrinking void field clamp (P2) ──────────────────
-        for e in self.enemies:
-            if getattr(e, "is_void_sovereign", False) and e.alive:
-                vm = getattr(e, "_void_margin", 0.0)
-                if vm > 0:
-                    p.x = max(vm + p.radius, min(C.ROOM_PIXEL_W - vm - p.radius, p.x))
-                    p.y = max(vm + p.radius, min(C.ROOM_PIXEL_H - vm - p.radius, p.y))
-                break
-
-        # Tick boss-gate hint timer
+        self._clamp_void_sovereign()
         self._boss_hint_t = max(0.0, self._boss_hint_t - dt)
-
-        # ── Enemies ───────────────────────────────────────────────────────────
-        for e in self.enemies:
-            e.update(dt, self.player, room, self.particles, self.enemy_projectiles)
-
-        # Drain minion-summon queues from boss enemies
-        new_summons: list[Enemy] = []
-        for e in self.enemies:
-            q = getattr(e, "_summon_queue", None)
-            if q:
-                new_summons.extend(q)
-                q.clear()
-        self.enemies.extend(new_summons)
-
-        # Drain Void Core pulse queue from player → piercing arrows
-        for vx2, vy2, vangle in self.player._void_queue:
-            vcore_arrow = Arrow(vx2, vy2, vangle, speed=280, damage=self.player.arrow_damage, lifetime=0.6)
-            vcore_arrow.piercing = True
-            self.player.arrows.append(vcore_arrow)
-        self.player._void_queue.clear()
-
-        # Drain MagmaSlug burn-patch queues → BurnPatch objects
-        for e in self.enemies:
-            pq = getattr(e, "_patch_queue", None)
-            if pq:
-                for px2, py2 in pq:
-                    self.burn_patches.append(BurnPatch(px2, py2))
-                pq.clear()
-
-        # Drain VoidShrieker hit-shake and death-burst queues
-        for e in self.enemies:
-            if getattr(e, "_hit_shake", False):
-                e._hit_shake = False  # type: ignore[attr-defined]
-                self.camera.add_shake(4)
-                self._void_flash_t = max(self._void_flash_t, 0.25)
-            dps = getattr(e, "_death_projs", None)
-            if dps:
-                self.enemy_projectiles.extend(dps)
-                dps.clear()
-
-        # Steer homing projectiles toward player before advancing them
-        for ep in self.enemy_projectiles:
-            if getattr(ep, "homing", False):
-                dx2 = self.player.x - ep.x
-                dy2 = self.player.y - ep.y
-                dist2 = math.hypot(dx2, dy2) or 1.0
-                tx = dx2 / dist2
-                ty = dy2 / dist2
-                spd = math.hypot(ep.vx, ep.vy) or 1.0
-                cx2 = ep.vx / spd
-                cy2 = ep.vy / spd
-                turn = math.radians(180.0 * dt)  # max turn per frame
-                # Rotate current direction by up to `turn` radians toward target
-                cross = cx2 * ty - cy2 * tx
-                dot = cx2 * tx + cy2 * ty
-                angle = math.atan2(cross, dot)
-                angle = max(-turn, min(turn, angle))
-                cos_a, sin_a = math.cos(angle), math.sin(angle)
-                ep.vx = (cx2 * cos_a - cy2 * sin_a) * spd
-                ep.vy = (cx2 * sin_a + cy2 * cos_a) * spd
-
-        for ep in self.enemy_projectiles:
-            ep.update(dt, room)
-
-        # ── Collisions ────────────────────────────────────────────────────────
-        for arrow in self.player.arrows:
-            if not arrow.alive:
-                continue
-            for enemy in self.enemies:
-                if not enemy.alive:
-                    continue
-                if id(enemy) in arrow.hit_enemies:
-                    continue
-                if (arrow.x - enemy.x) ** 2 + (arrow.y - enemy.y) ** 2 < (enemy.radius + 5) ** 2:
-                    arrow.hit_enemies.add(id(enemy))
-                    if not arrow.piercing:
-                        arrow.alive = False
-                    actual_dmg = arrow.damage
-                    # Overcharged Quiver: every 4th arrow deals x3
-                    if getattr(arrow, "_overcharged", False):
-                        actual_dmg = arrow.damage * 3
-                    # StoneCrawler shell deflect — reflect arrow back at player
-                    if isinstance(enemy, StoneCrawler) and enemy._iframes <= 0 and enemy._shell_hits > 0:
-                        arrow.alive = False
-                        _ref_angle = math.atan2(self.player.y - enemy.y, self.player.x - enemy.x)
-                        self.enemy_projectiles.append(
-                            EnemyProjectile(enemy.x, enemy.y, _ref_angle,
-                                            speed=C.ARROW_SPEED, damage=actual_dmg,
-                                            color=C.C_ARROW)
-                        )
-                        enemy.take_hit(actual_dmg, self.particles)
-                        self.camera.add_shake(3)
-                        break
-                    if actual_dmg > 0:
-                        # Hunter's Mark: first enemy hit per room takes x3
-                        if self.player.hunter_mark and not self.player._hunter_mark_used:
-                            actual_dmg *= 3
-                            self.player._hunter_mark_used = True
-                        enemy.take_hit(actual_dmg, self.particles)
-                        # Venom Gland: apply poison to enemy
-                        if self.player.arrow_poison:
-                            enemy._poison_t = max(enemy._poison_t, 4.0)
-                    self.camera.add_shake(3)
-                    if getattr(enemy, "phase2_just_triggered", False):
-                        enemy.phase2_just_triggered = False
-                        self.camera.add_shake(getattr(enemy, "_phase2_shake", 14))
-                    if not enemy.alive:
-                        self._drop_coins(enemy)
-                        # Echoing Shot: spawn reflected arrow aimed at nearest survivor
-                        if self.player.echoing_shot:
-                            living = [e for e in self.enemies if e.alive and e is not enemy]
-                            if living:
-                                near = min(living, key=lambda e: (e.x - enemy.x) ** 2 + (e.y - enemy.y) ** 2)
-                                if (near.x - enemy.x) ** 2 + (near.y - enemy.y) ** 2 < 300**2:
-                                    ea = math.atan2(near.y - enemy.y, near.x - enemy.x)
-                                    self.player.arrows.append(
-                                        Arrow(
-                                            enemy.x,
-                                            enemy.y,
-                                            ea,
-                                            speed=self.player.arrow_speed,
-                                            damage=self.player.arrow_damage,
-                                            piercing=self.player.piercing,
-                                        )
-                                    )
-                        # Leech Stone: +1 HP every 50 kills
-                        if self.player.leech_stone:
-                            self.player._leech_kills += 1
-                            if self.player._leech_kills >= 50:
-                                self.player._leech_kills = 0
-                                if self.player.hp < self.player.max_hp:
-                                    self.player.hp += 1
-                        # Bloodlust: +10 % speed per kill, stacks x3, 3 s timer
-                        if self.player.bloodlust:
-                            self.player._bloodlust_stacks = min(3, self.player._bloodlust_stacks + 1)
-                            self.player._bloodlust_t = 3.0
-
-        for ep in self.enemy_projectiles:
-            if not ep.alive:
-                continue
-            # Temporal Blur clones intercept projectiles
-            absorbed = False
-            for clone in self._blur_clones:
-                if (ep.x - clone["x"]) ** 2 + (ep.y - clone["y"]) ** 2 < 14**2:
-                    ep.alive = False
-                    clone["charges"] -= 1
-                    self.particles.emit_hit(ep.x, ep.y, 0)
-                    absorbed = True
-                    break
-            if absorbed:
-                continue
-            if (ep.x - self.player.x) ** 2 + (ep.y - self.player.y) ** 2 < (C.PLAYER_RADIUS + 6) ** 2:
-                ep.alive = False
-                if self.player.take_damage(ep.damage):
-                    self.particles.emit_player_hurt(self.player.x, self.player.y)
-                    self.camera.add_shake(6)
-                    # Abyssal Leech tendril healing: boss heals 3 HP when tendril connects
-                    leech = getattr(ep, "leech_owner", None)
-                    if leech is not None and leech.alive:
-                        leech.hp = min(leech.max_hp, leech.hp + 3)
-                    # Spiked Shell: deal 2 dmg to all enemies within 80 px
-                    if self.player.spiked_shell:
-                        for e in self.enemies:
-                            if e.alive and ((e.x - self.player.x) ** 2 + (e.y - self.player.y) ** 2 < 80**2):
-                                e.take_hit(2, self.particles)
-                                if not e.alive:
-                                    self._drop_coins(e)
-
-        # Prune expired blur clones
-        self._blur_clones = [c for c in self._blur_clones if c["charges"] > 0]
-
-        # Drain any VoidShrieker death-burst projectiles triggered by arrow kills
-        for e in self.enemies:
-            dps = getattr(e, "_death_projs", None)
-            if dps:
-                self.enemy_projectiles.extend(dps)
-                dps.clear()
-
-        self.enemies = [e for e in self.enemies if e.alive]
-        self.enemy_projectiles = [ep for ep in self.enemy_projectiles if ep.alive]
-
-        # ── Coins ─────────────────────────────────────────────────────────────
-        for coin in self.coins:
-            if coin.update(dt, self.player, self.particles):
-                sounds.play("coin")
-                self._coins_collected_total += 1
-                # Coin-Fed Heart: +1 HP every 100 coins (can't over-heal if Petrified Heart)
-                if self.player.coin_fed_heart:
-                    self.player._coin_fed_acc += 1
-                    if self.player._coin_fed_acc >= 100:
-                        self.player._coin_fed_acc = 0
-                        if self.player.hp < self.player.max_hp and not self.player.petrified_heart:
-                            self.player.hp += 1
-        self.coins = [c for c in self.coins if not c.collected]
-
-        # ── Burn patches (MagmaSlug DoT floor hazard) ─────────────────────────
-        _burn_dot_acc = getattr(self, "_burn_dot_acc", 0.0)
-        _burn_overlap = False
-        for patch in self.burn_patches:
-            if patch.update(dt, self.player):
-                _burn_overlap = True
-        if _burn_overlap:
-            _burn_dot_acc += dt
-            if _burn_dot_acc >= 1.0:
-                _burn_dot_acc -= 1.0
-                if self.player.take_damage(1):
-                    self.particles.emit_player_hurt(self.player.x, self.player.y)
-                    self.camera.add_shake(4)
-        else:
-            _burn_dot_acc = max(0.0, _burn_dot_acc - dt * 0.5)  # decay accumulator when clear
-        self._burn_dot_acc = _burn_dot_acc
-        self.burn_patches = [bp for bp in self.burn_patches if bp.alive]
-
-        # ── Fungal Matriarch passive: spore aura 0.5 HP/s within 80 px ────────
-        _mat_aura_acc = getattr(self, "_mat_aura_acc", 0.0)
-        _mat_overlap = False
-        for e in self.enemies:
-            if getattr(e, "_spore_cloud_passive", False) and e.alive:
-                if (self.player.x - e.x) ** 2 + (self.player.y - e.y) ** 2 < 80**2:
-                    _mat_overlap = True
-                break
-        if _mat_overlap:
-            _mat_aura_acc += dt * 0.5
-            if _mat_aura_acc >= 1.0:
-                _mat_aura_acc -= 1.0
-                if self.player.take_damage(1):
-                    self.particles.emit_player_hurt(self.player.x, self.player.y)
-                    self.camera.add_shake(3)
-        else:
-            _mat_aura_acc = max(0.0, _mat_aura_acc - dt * 0.3)
-        self._mat_aura_acc = _mat_aura_acc
+        self._update_enemies_and_drain_queues(dt, room)
+        self._resolve_spiked_shell()
+        self._dot_kill_sweep()
+        self._steer_and_advance_projectiles(dt, room)
+        self._resolve_arrow_collisions()
+        self._resolve_projectile_collisions()
+        self._prune_entities()
+        self._collect_coins(dt)
+        self._update_burn_and_aura(dt)
 
         # ── Chests ────────────────────────────────────────────────────────────
         for chest in self.chests:
-            if chest.update(dt, self.player):
+            if chest.update(dt, p):
                 self._upgrade_perks = chest.perks
                 self._upgrade_hovered = -1
                 self._upgrade_open_ms = pygame.time.get_ticks()
@@ -2383,8 +1949,8 @@ class Game:
 
         # ── Ladder descent (after relic pick, player walks back to staircase) ──
         if self._ladder_ready and dr.is_boss and self._show_staircase:
-            dx = self.player.x - self._staircase_x
-            dy = self.player.y - self._staircase_y
+            dx = p.x - self._staircase_x
+            dy = p.y - self._staircase_y
             if dx * dx + dy * dy < 40.0**2:
                 self._next_floor()
                 return
@@ -2398,7 +1964,6 @@ class Game:
             cy = float(C.ROOM_PIXEL_H // 2)
             self.particles.emit_room_clear(cx, cy)
             if dr.is_boss:
-                # Boss killed — spawn staircase; player walks to it (or presses Space)
                 if self.dungeon.floor >= 7:
                     self._finish_run()
                     self.state = "VICTORY"
@@ -2411,9 +1976,8 @@ class Game:
                     self.state = "FLOOR_CLEAR"
                 return
             if not dr.is_start and not dr.is_shop and random.random() < 0.5:
-                # Normal combat room — 50 % chance to spawn a mossy chest
                 cx2, cy2 = room.find_spawn_near_centre(28.0)
-                self.chests.append(Chest(cx2, cy2, random.sample(_available_perks(self.player), 3)))
+                self.chests.append(Chest(cx2, cy2, random.sample(_available_perks(p), 3)))
 
         # ── Door-exit detection (only when cleared) ────────────────────────────
         if dr.cleared:
@@ -2558,6 +2122,30 @@ class Game:
             ox = random.uniform(-24, 24)
             oy = random.uniform(-24, 24)
             self.coins.append(Coin(enemy.x + ox, enemy.y + oy))
+
+    def _on_enemy_killed(self, enemy: Enemy, drop_coins: bool = True) -> None:
+        """Process all kill-chain effects when an enemy dies (arrow or DoT kill)."""
+        p = self.player
+        if drop_coins:
+            self._drop_coins(enemy)
+        if p.echoing_shot:
+            living = [e for e in self.enemies if e.alive and e is not enemy]
+            if living:
+                near = min(living, key=lambda e: (e.x - enemy.x) ** 2 + (e.y - enemy.y) ** 2)
+                if (near.x - enemy.x) ** 2 + (near.y - enemy.y) ** 2 < 300**2:
+                    ea = math.atan2(near.y - enemy.y, near.x - enemy.x)
+                    p.arrows.append(
+                        Arrow(enemy.x, enemy.y, ea, speed=p.arrow_speed, damage=p.arrow_damage, piercing=p.piercing)
+                    )
+        if p.leech_stone:
+            p._leech_kills += 1
+            if p._leech_kills >= 50:
+                p._leech_kills = 0
+                if p.hp < p.max_hp:
+                    p.hp += 1
+        if p.bloodlust:
+            p._bloodlust_stacks = min(3, p._bloodlust_stacks + 1)
+            p._bloodlust_t = 3.0
 
     def _debug_kill_all(self) -> None:
         """[DEBUG] Instantly kill every living enemy in the current room."""
@@ -2753,6 +2341,19 @@ class Game:
         for ep in self.enemy_projectiles:
             ep.draw(self.screen, cam)
         self.player.draw(self.screen, cam)
+
+        # Spiked Shell: expanding shockwave ring (80 px radius, fades out)
+        if self._spiked_shell_flash_t > 0:
+            _SHELL_DUR = 0.35
+            progress = 1.0 - self._spiked_shell_flash_t / _SHELL_DUR  # 0→1 as ring expands
+            ring_r = round(C.PLAYER_RADIUS + (80 - C.PLAYER_RADIUS) * progress)
+            alpha = int((1.0 - progress) * 200)
+            sx2, sy2 = cam.apply_pos(self.player.x, self.player.y)
+            sx2, sy2 = round(sx2), round(sy2)
+            shell_surf = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4), pygame.SRCALPHA)
+            pygame.draw.circle(shell_surf, (255, 160, 60, alpha), (ring_r + 2, ring_r + 2), ring_r, 3)
+            self.screen.blit(shell_surf, (sx2 - ring_r - 2, sy2 - ring_r - 2))
+
         self.particles.draw(self.screen, cam.offset.x, cam.offset.y)
 
         # Void Sovereign: dark void border (P2 shrinking arena)

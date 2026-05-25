@@ -81,6 +81,7 @@ class Player:
         self._overcharged_count: int = 0  # arrow counter
         self.ancient_sigil: bool = False  # 1 s iframes on room entry
         self.spiked_shell: bool = False  # AoE on hurt
+        self.spiked_shell_triggered: bool = False  # set by take_damage; read & cleared by game.py
         self.temporal_blur: bool = False  # blur clones on dash
         self.runic_arrows: bool = False  # arrows bounce off walls
         self.bloodlust: bool = False  # speed on kill
@@ -250,6 +251,8 @@ class Player:
             self.block_charge -= 1
             self._iframes = self.iframes_dur
             self._flash = 0.12
+            if self.spiked_shell:
+                self.spiked_shell_triggered = True
             return True  # hit registered (for spiked_shell etc.) but no HP lost
         # Petrified Heart: 50 % damage reduction via accumulator.
         # Each hit contributes amount×0.5 to the acc; only integer overflow is applied.
@@ -263,6 +266,8 @@ class Player:
                 self._iframes = self.iframes_dur
                 self._flash = 0.12
                 return True
+        if self.spiked_shell:
+            self.spiked_shell_triggered = True
         self.hp -= amount
         self._iframes = self.iframes_dur
         self._flash = 0.12

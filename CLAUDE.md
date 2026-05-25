@@ -16,7 +16,7 @@ uv run verdant-depths [--keys arrows|wasd|zqsd]
 | `config.py` | Runtime config — key layout (`--keys` flag) |
 | `sounds.py` | Procedural audio synthesis + asset file override |
 | `main.py` | pygame init, mixer pre-init, `sounds.init()`, game loop |
-| `game.py` | State machine: **MENU** / PLAYING ↔ TRANSITIONING / UPGRADE / SHOP / FLOOR_CLEAR / RELIC / VICTORY / DEAD / **ARENA_SELECT** / **ARENA** / ARENA_WIN / ARENA_DEAD / **ENDLESS_SELECT** / **ENDLESS** / ENDLESS_BETWEEN / ENDLESS_DEAD; dungeon nav, gate blocking, coin drops, floor progression, boss spawn, summon drain, pack wave roll, run-stats tracking, high-score I/O |
+| `game.py` | State machine: **MENU** / PLAYING ↔ TRANSITIONING / UPGRADE / SHOP / FLOOR_CLEAR / RELIC / VICTORY / DEAD / **ARENA_SELECT** / **ARENA_RELIC_SELECT** / **ARENA** / ARENA_WIN / ARENA_DEAD / **ENDLESS_SELECT** / **ENDLESS** / ENDLESS_BETWEEN / ENDLESS_DEAD; dungeon nav, gate blocking, coin drops, floor progression, boss spawn, summon drain, pack wave roll, run-stats tracking, high-score I/O |
 | `camera.py` | World↔screen transform + screen shake |
 | `rooms.py` | Tile grid, 9 templates (5 base + 4 underground-ruin), collision, `find_spawn_near_centre`, door tile cuts, `get_spawn_positions` with `exclude_pos` |
 | `dungeon.py` | DFS room graph, BFS boss detection, floor-weighted template selection |
@@ -26,7 +26,7 @@ uv run verdant-depths [--keys arrows|wasd|zqsd]
 | `relics.py` | 20 `Relic` dataclasses; each has `apply(player)` callback; `RELIC_POOL` list |
 | `projectiles.py` | Arrow (speed/damage/piercing/bouncing/overcharged kwargs, `hit_enemies` set), EnemyProjectile (homing, leech_owner flags) |
 | `particles.py` | Lightweight particle pool, named presets (inc. boss death/phase-2 bursts) |
-| `ui.py` | HUD, minimap (20×11 px cells), **main menu**, death/victory/floor-clear/relic screens, upgrade chooser, shop screen, **boss HP bar**, **boss-gate hint** |
+| `ui.py` | HUD, minimap (20×11 px cells), **main menu**, death/victory/floor-clear/relic screens, upgrade chooser, shop screen, **boss HP bar**, **boss-gate hint**, **arena relic select** |
 
 ## Layout
 
@@ -137,9 +137,16 @@ Override any track: drop `<name>.ogg` (or `.wav`) in `src/gamejam_may_2026/asset
 | Arrow keys | Navigate enemy grid |
 | `-` / `=` | Decrease / increase enemy count |
 | Mouse scroll | Decrease / increase enemy count |
-| Click (selected) | Double-click selected card to start fight |
-| Enter / Space | Start fight |
+| Enter / Space | Proceed to relic select |
 | Esc | Back to menu |
+
+### Arena Mode controls (ARENA_RELIC_SELECT screen)
+
+| Key | Action |
+|---|---|
+| Arrow keys | Navigate relic grid |
+| Enter / Space | Confirm selection and start fight |
+| Esc | Back to enemy select |
 
 ## Perks (12 total — `perks.py`)
 
@@ -333,10 +340,11 @@ Prices set so HP + Perk ≈ expected floor income (30/70 split). Clearing all co
 
 ## Arena Mode
 
-Accessible from the main menu with `A`. A standalone 1v1 (or 1vN) practice mode — no items, no relics, no floor progression.
+Accessible from the main menu with `A`. A standalone 1v1 (or 1vN) practice mode — no perks, no shop, no floor progression. One optional relic can be chosen before each fight.
 
 ### States
 - `ARENA_SELECT` — enemy selection screen (6×3 grid of all 18 enemies)
+- `ARENA_RELIC_SELECT` — relic pick screen (choose 1 relic or go in with none)
 - `ARENA` — sealed room fight (all doors locked, no upgrades/coins)
 - `ARENA_WIN` — all enemies defeated overlay
 - `ARENA_DEAD` — player died overlay
@@ -344,10 +352,16 @@ Accessible from the main menu with `A`. A standalone 1v1 (or 1vN) practice mode 
 ### Selection screen (`game.py: _ARENA_ENTRIES`, `ui.py: draw_arena_select`)
 - 12 regular enemies + 6 bosses
 - Count 1–`max_count` (regular max 4–10; boss max 2–3)
-- Arrow keys to navigate; `-`/`=` or mouse scroll to change count; Enter/Space to start
+- Arrow keys to navigate; `-`/`=` or mouse scroll to change count; Enter/Space → goes to relic select
+
+### Relic select screen (`game.py: _handle_arena_relic_select_event`, `ui.py: draw_arena_relic_select`)
+- Full grid of all 20 relics + a "No Relic" option (default)
+- Click or arrow-key to select; Enter/Space to confirm and start the fight
+- Esc returns to enemy select; clicking a card immediately starts the fight
 
 ### Arena fight (`game.py: _update_arena`)
-- Fresh `Player` (3 HP, no relics, no perks) each fight
+- Fresh `Player` (3 HP, no perks) each fight; chosen relic is applied via `relic.apply(player)`
+- All relic effects active: Venom Gland, Echoing Shot, Leech Stone, Bloodlust, etc.
 - Uses a `Dungeon(floor=1)` start room; all doors permanently locked
 - Boss HP bar shown for boss enemies; HUD shows `⚔ EnemyName ×N` label
 - Boss summons (Shaman, Matriarch, Sovereign) work normally
