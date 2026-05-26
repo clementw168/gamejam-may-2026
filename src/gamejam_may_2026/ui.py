@@ -686,7 +686,12 @@ _MENU_BTN_STYLES = [
     ((44, 34, 12), (80, 60, 18), (110, 80, 28), (200, 155, 55), (185, 155, 90), (240, 210, 120)),
 ]
 _MENU_BTN_LABELS = ["Dungeon Mode", "Arena Mode", "Endless Mode", "Codex"]
-_MENU_BTN_SUBLABELS = ["7-floor roguelite run", "1v1 practice fights", "Survive infinite waves", "View enemies & relics"]
+_MENU_BTN_SUBLABELS = [
+    "7-floor roguelite run",
+    "1v1 practice fights",
+    "Survive infinite waves",
+    "View enemies & relics",
+]
 
 
 def _menu_button_rects() -> list[pygame.Rect]:
@@ -1006,8 +1011,20 @@ def _get_codex_enemies() -> tuple[list, list]:
         ),
         (E.SporeElder, {}, "Spore Elder", "F5+ elite", "Elite plant. Fires 8-way volleys and periodic 6-spore clouds."),
         (E.ShadowWraith, {}, "Shadow Wraith", "F5+", "Teleports every 4 s. Fires pairs of homing projectiles."),
-        (E.BoneArcher, {}, "Bone Archer", "F6+", "3-way spread shots; every 4th shot is a 3-way volley of slow heavy bone spikes (2 dmg each)."),
-        (E.MagmaSlug, {}, "Magma Slug", "F6+", "Slow armoured chaser. Leaves huge magma pools that linger for 8s; deals 2 contact damage."),
+        (
+            E.BoneArcher,
+            {},
+            "Bone Archer",
+            "F6+",
+            "3-way spread shots; every 4th shot is a 3-way volley of slow heavy bone spikes (2 dmg each).",
+        ),
+        (
+            E.MagmaSlug,
+            {},
+            "Magma Slug",
+            "F6+",
+            "Slow armoured chaser. Leaves huge magma pools that linger for 8s; deals 2 contact damage.",
+        ),
         (
             E.VoidShrieker,
             {},
@@ -1370,7 +1387,7 @@ def draw_arena_select(
     shadow = _font(52, bold=True).render("ARENA MODE", True, (55, 18, 95))
     surf.blit(shadow, (cx - shadow.get_width() // 2 + 2, 18 + 2))
     surf.blit(title, (cx - title.get_width() // 2, 18))
-    sub = _font(15).render("No items · no relics · pure skill", True, (110, 75, 165))
+    sub = _font(15).render("No perks · No healing · pure skill", True, (110, 75, 165))
     surf.blit(sub, (cx - sub.get_width() // 2, 76))
 
     # ── Enemy grid ────────────────────────────────────────────────────────────
@@ -1545,7 +1562,9 @@ def draw_arena_relic_select(
     nr_border = (210, 160, 255) if nr_sel else (140, 100, 200) if nr_hov else (65, 48, 96)
     pygame.draw.rect(surf, nr_bg, nr_rect, border_radius=8)
     pygame.draw.rect(surf, nr_border, nr_rect, 2, border_radius=8)
-    nr_label = _font(18, bold=nr_sel).render("✕  No Relic  (default)", True, (230, 210, 255) if nr_sel else (140, 120, 180))
+    nr_label = _font(18, bold=nr_sel).render(
+        "[ No Relic ]  (default)", True, (230, 210, 255) if nr_sel else (140, 120, 180)
+    )
     surf.blit(nr_label, (nr_rect.centerx - nr_label.get_width() // 2, nr_rect.centery - nr_label.get_height() // 2))
 
     # ── Relic grid ───────────────────────────────────────────────────────────
@@ -1581,7 +1600,7 @@ def draw_arena_relic_select(
     active = hovered if hovered >= -1 else selected
     if active >= 0 and active < len(relic_pool):
         relic = relic_pool[active]
-        panel_text = f"{relic.icon}  {relic.name}  —  {relic.desc}"
+        panel_text = f"{relic.name}  —  {relic.desc}"
         ps = _font(16).render(panel_text, True, (200, 180, 240))
         surf.blit(ps, (cx - ps.get_width() // 2, desc_y))
     elif active == -1:
@@ -1591,7 +1610,8 @@ def draw_arena_relic_select(
     # ── Controls hint ────────────────────────────────────────────────────────
     hint = _font(14).render(
         "Arrow keys — navigate   ·   Enter / Space — confirm   ·   Esc — back to enemy select",
-        True, (65, 50, 95),
+        True,
+        (65, 50, 95),
     )
     surf.blit(hint, (cx - hint.get_width() // 2, C.SCREEN_H - 24))
 

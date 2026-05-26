@@ -2258,7 +2258,7 @@ class Game:
         # ── HUD ───────────────────────────────────────────────────────────────
         if self.state in _arena_states:
             entry = _ARENA_ENTRIES[self._arena_selected]
-            label = f"⚔ {entry['name']} ×{self._arena_count}"
+            label = f"Arena: {entry['name']} x{self._arena_count}"
             ui.draw_hud(
                 self.screen,
                 self.player,
@@ -2267,8 +2267,8 @@ class Game:
             )
         elif self.state in _endless_states:
             w = self._endless_wave
-            boss_marker = " ⚔ BOSS" if w % 5 == 0 else ""
-            label = f"∞ Wave {w}{boss_marker}"
+            boss_marker = " [BOSS]" if w % 5 == 0 else ""
+            label = f"Endless Wave {w}{boss_marker}"
             ui.draw_hud(
                 self.screen,
                 self.player,
