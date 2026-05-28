@@ -233,7 +233,7 @@ Accessible from the main menu with `E`. No coins, no shop, no floor structure �
 - Virtual floor = `min(7, 1 + cycle)` where cycle is 0-indexed (wave 1–5 = cycle 0, wave 6–10 = cycle 1 …)
 - Room depth = `min(3, position_in_cycle + 1)` → enemy composition uses existing `_spawn_wave(room, vfloor, depth)`
 - Boss waves scale by **generation** (complete 7-boss rotations): gen 0 = 1 boss, gen 1 = 2 bosses, gen 2+ = 3 bosses (capped). Each wave picks `slot = cycle % 7` and spawns floors `[slot+1, (slot+1)%7+1, …]` spread across the room.
-- After cycle 6 (wave 35+), difficulty stays at max floor 7 with room_depth=3
+- After cycle 6 (wave 35+), room_depth stays at 3 but vfloor keeps climbing (uncapped): enemy HP/speed scale every cycle, and counts scale +20% per floor above 7
 
 ### Starting from a higher wave
 - Player selects a multiple of 5 (e.g. 10); first fight is wave 11

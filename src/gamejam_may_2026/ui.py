@@ -693,6 +693,12 @@ _MENU_BTN_SUBLABELS = [
     "View enemies & relics",
 ]
 
+_KEY_CHIP_W = 82
+_KEY_CHIP_H = 26
+_KEY_CHIP_GAP = 8
+_KEY_LAYOUTS_ORDER = ["zqsd", "wasd", "arrows"]
+_KEY_LAYOUTS_LABEL = {"zqsd": "ZQSD", "wasd": "WASD", "arrows": "Arrows"}
+
 
 def _menu_button_rects() -> list[pygame.Rect]:
     """Return the four main-menu button rects (Dungeon, Arena, Endless, Codex)."""
@@ -711,7 +717,27 @@ def menu_button_at(mx: int, my: int) -> int:
     return -1
 
 
-def draw_menu(surf: pygame.Surface, highscore: dict, hovered: int = -1) -> None:
+def _key_chip_rects() -> list[pygame.Rect]:
+    rects = _menu_button_rects()
+    ctrl_y = rects[-1].bottom + 26
+    chip_y = ctrl_y + 24
+    total_w = 3 * _KEY_CHIP_W + 2 * _KEY_CHIP_GAP
+    left = C.SCREEN_W // 2 - total_w // 2
+    return [
+        pygame.Rect(left + i * (_KEY_CHIP_W + _KEY_CHIP_GAP), chip_y, _KEY_CHIP_W, _KEY_CHIP_H)
+        for i in range(3)
+    ]
+
+
+def key_layout_chip_at(mx: int, my: int) -> str | None:
+    """Return layout name ("zqsd"/"wasd"/"arrows") if (mx, my) hits a chip, else None."""
+    for i, r in enumerate(_key_chip_rects()):
+        if r.collidepoint(mx, my):
+            return _KEY_LAYOUTS_ORDER[i]
+    return None
+
+
+def draw_menu(surf: pygame.Surface, highscore: dict, hovered: int = -1, key_layout: str = "zqsd") -> None:
     """Title / main-menu screen with three navigation buttons."""
     surf.fill(C.C_BG)
     cx = C.SCREEN_W // 2
@@ -752,8 +778,9 @@ def draw_menu(surf: pygame.Surface, highscore: dict, hovered: int = -1) -> None:
     # ── Quick controls strip ──────────────────────────────────────────────────
     ctrl_y = rects[-1].bottom + 26
     ctrl_fnt = _font(15)
+    active_move = {"zqsd": "ZQSD", "wasd": "WASD", "arrows": "Arrows"}.get(key_layout, "ZQSD")
     controls = [
-        ("Move", "ZQSD / WASD / Arrows"),
+        ("Move", active_move),
         ("Shoot", "Left Click"),
         ("Dash", "Space"),
         ("Quit", "Esc"),
@@ -765,8 +792,23 @@ def draw_menu(surf: pygame.Surface, highscore: dict, hovered: int = -1) -> None:
     ctrl_s = ctrl_fnt.render(ctrl_str, True, (65, 100, 55))
     surf.blit(ctrl_s, (cx - ctrl_s.get_width() // 2, ctrl_y))
 
+    # ── Key layout toggle chips ───────────────────────────────────────────────
+    chip_rects = _key_chip_rects()
+    keys_lbl = _font(14).render("Keys:", True, (65, 100, 55))
+    surf.blit(keys_lbl, (chip_rects[0].x - keys_lbl.get_width() - 8, chip_rects[0].centery - keys_lbl.get_height() // 2))
+    for i, r in enumerate(chip_rects):
+        name = _KEY_LAYOUTS_ORDER[i]
+        active = name == key_layout
+        bg = (52, 96, 40) if active else (22, 38, 18)
+        bd = (100, 220, 80) if active else (45, 80, 35)
+        lbl_c = (220, 255, 195) if active else (80, 130, 65)
+        pygame.draw.rect(surf, bg, r, border_radius=5)
+        pygame.draw.rect(surf, bd, r, 2, border_radius=5)
+        chip_txt = _font(14, bold=active).render(_KEY_LAYOUTS_LABEL[name], True, lbl_c)
+        surf.blit(chip_txt, (r.centerx - chip_txt.get_width() // 2, r.centery - chip_txt.get_height() // 2))
+
     # ── Best run ──────────────────────────────────────────────────────────────
-    best_top = ctrl_y + 34
+    best_top = chip_rects[0].bottom + 14
     if highscore.get("floors", 0) > 0:
         bt = _font(16, bold=True).render("BEST RUN", True, (200, 175, 60))
         surf.blit(bt, (cx - bt.get_width() // 2, best_top))
@@ -1109,6 +1151,17 @@ def _codex_enemy_sprite(
     surf.set_clip(old_clip)
 
 
+def codex_tab_at(mx: int, my: int) -> int:
+    """Return tab index if (mx, my) falls inside the codex tab bar, else -1."""
+    HEADER_H = 44
+    TAB_H = 38
+    if not (HEADER_H <= my < HEADER_H + TAB_H):
+        return -1
+    tab_w = C.SCREEN_W // len(_CODEX_TABS)
+    idx = mx // tab_w
+    return idx if 0 <= idx < len(_CODEX_TABS) else -1
+
+
 def draw_codex(surf: pygame.Surface, tab: int, scroll: int = 0) -> None:
     """Full-screen Codex — enemies, bosses, relics and perks with sprites/icons."""
     from gamejam_may_2026.perks import PERK_POOL  # type: ignore
@@ -1125,7 +1178,7 @@ def draw_codex(surf: pygame.Surface, tab: int, scroll: int = 0) -> None:
     HEADER_H = 44
     title = _font(30, bold=True).render("CODEX", True, (95, 195, 90))
     surf.blit(title, (16, (HEADER_H - title.get_height()) // 2))
-    hint = _font(16).render("Esc  to exit   ·   < / > tabs   ·   ^ / v scroll", True, (55, 95, 50))
+    hint = _font(16).render("Esc  to exit   ·   click / < > tabs   ·   scroll / ^ v", True, (55, 95, 50))
     surf.blit(hint, (C.SCREEN_W - hint.get_width() - 16, (HEADER_H - hint.get_height()) // 2))
 
     # ── Tab bar ──────────────────────────────────────────────────────────────

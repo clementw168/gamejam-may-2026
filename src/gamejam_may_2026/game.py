@@ -507,16 +507,18 @@ def _pack_wave(
         pack_types += ["shrieker"]
     pack = random.choice(pack_types)
 
+    bonus = (floor - 1) // 2  # +1 per 2 floors: 0@F1, 1@F3, 2@F5, 3@F7
+
     if pack == "runner":
-        n, cls = random.randint(5, 7), GoblinRunner
+        n, cls = random.randint(5 + bonus, 7 + bonus), GoblinRunner
     elif pack == "wolf":
-        n, cls = random.randint(4, 6), Wolf
+        n, cls = random.randint(4 + bonus, 6 + bonus), Wolf
     elif pack == "bat":
-        n, cls = random.randint(5, 7), VenomfangBat
+        n, cls = random.randint(5 + bonus, 7 + bonus), VenomfangBat
     elif pack == "turret":
-        n, cls = random.randint(3, 4), CrystalTurret
+        n, cls = random.randint(3 + bonus, 4 + bonus), CrystalTurret
     else:  # shrieker
-        n, cls = random.randint(4, 5), VoidShrieker
+        n, cls = random.randint(4 + bonus, 5 + bonus), VoidShrieker
 
     positions = room.get_spawn_positions(n, min_dist_from_centre=150.0, exclude_pos=exclude_pos)
     return [cls(px, py, floor=floor) for px, py in positions]
@@ -531,19 +533,25 @@ def _spawn_wave(
     """Scale enemy variety with room_num; scale counts and stats with floor."""
     depth = min(room_num, 3)
     fl = min(floor, 7)
+    # Beyond F7 (endless only) counts scale up 20% per floor above 7
+    count_scale = 1.0 + max(0, floor - 7) * 0.20
+    def _c(base: int) -> int:
+        # Jitter ±1 around the base (never below 0, never below 1 if base≥1)
+        jittered = random.randint(max(1, base - 1), base + 1) if base > 0 else 0
+        return max(jittered, round(jittered * count_scale))
     #                              F1  F2  F3  F4  F5  F6  F7
-    runners = (2, 3, 4, 4, 4, 4, 5)[fl - 1]
-    wolves = (1, 1, 2, 2, 2, 2, 2)[fl - 1]
-    archers = (1, 2, 2, 2, 3, 3, 3)[fl - 1] if depth >= 2 else 0
-    plants = (1, 1, 2, 2, 2, 2, 3)[fl - 1] if depth >= 3 else 0
-    elders = (0, 0, 0, 0, 1, 1, 1)[fl - 1] if depth >= 3 else 0  # floor 5+ — elite SporePlant
-    crawlers = (0, 0, 0, 1, 1, 2, 2)[fl - 1]  # floor 4+ — armoured melee
-    bats = (0, 0, 0, 1, 2, 2, 3)[fl - 1]  # floor 4+ — fast arc mover
-    turrets = (0, 0, 0, 0, 1, 1, 2)[fl - 1]  # floor 5+ — stationary, directional
-    wraiths = (0, 0, 0, 0, 1, 1, 2)[fl - 1]  # floor 5+ — teleporting caster
-    bone_archers = (0, 0, 0, 0, 0, 1, 2)[fl - 1]  # floor 6+ — 3-way spread + bone spike
-    slugs = (0, 0, 0, 0, 0, 1, 1)[fl - 1]  # floor 6+ — slow melee + burn patches
-    shriekers = (0, 0, 0, 0, 0, 0, 1)[fl - 1]  # floor 7  — death burst + void flash
+    runners = _c((2, 3, 4, 4, 4, 4, 5)[fl - 1])
+    wolves = _c((1, 1, 2, 2, 2, 2, 2)[fl - 1])
+    archers = _c((1, 2, 2, 2, 3, 3, 3)[fl - 1]) if depth >= 2 else 0
+    plants = _c((1, 1, 2, 2, 2, 2, 3)[fl - 1]) if depth >= 3 else 0
+    elders = _c((0, 0, 0, 0, 1, 1, 1)[fl - 1]) if depth >= 3 else 0  # floor 5+ — elite SporePlant
+    crawlers = _c((0, 0, 0, 1, 1, 2, 2)[fl - 1])  # floor 4+ — armoured melee
+    bats = _c((0, 0, 0, 1, 2, 2, 3)[fl - 1])  # floor 4+ — fast arc mover
+    turrets = _c((0, 0, 0, 0, 1, 1, 2)[fl - 1])  # floor 5+ — stationary, directional
+    wraiths = _c((0, 0, 0, 0, 1, 1, 2)[fl - 1])  # floor 5+ — teleporting caster
+    bone_archers = _c((0, 0, 0, 0, 0, 1, 2)[fl - 1])  # floor 6+ — 3-way spread + bone spike
+    slugs = _c((0, 0, 0, 0, 0, 1, 1)[fl - 1])  # floor 6+ — slow melee + burn patches
+    shriekers = _c((0, 0, 0, 0, 0, 0, 1)[fl - 1])  # floor 7  — death burst + void flash
 
     total = (
         runners
@@ -821,19 +829,23 @@ class Game:
             if event.type == pygame.MOUSEMOTION:
                 self._menu_hovered = ui.menu_button_at(*event.pos)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                idx = ui.menu_button_at(*event.pos)
-                if idx == 0:
-                    self._new_game()
-                elif idx == 1:
-                    self._arena_focus = "grid"
-                    self.state = "ARENA_SELECT"
-                elif idx == 2:
-                    self._endless_select_wave = 0
-                    self.state = "ENDLESS_SELECT"
-                elif idx == 3:
-                    self._codex_tab = 0
-                    self._codex_scroll = 0
-                    self.state = "CODEX"
+                layout = ui.key_layout_chip_at(*event.pos)
+                if layout is not None:
+                    config.KEY_LAYOUT = layout
+                else:
+                    idx = ui.menu_button_at(*event.pos)
+                    if idx == 0:
+                        self._new_game()
+                    elif idx == 1:
+                        self._arena_focus = "grid"
+                        self.state = "ARENA_SELECT"
+                    elif idx == 2:
+                        self._endless_select_wave = 0
+                        self.state = "ENDLESS_SELECT"
+                    elif idx == 3:
+                        self._codex_tab = 0
+                        self._codex_scroll = 0
+                        self.state = "CODEX"
             elif event.type == pygame.KEYDOWN:
                 k = event.key
                 if k == pygame.K_RETURN or k == pygame.K_KP_ENTER or k == pygame.K_SPACE:
@@ -900,6 +912,13 @@ class Game:
                     self._codex_scroll = max(0, self._codex_scroll - 40)
                 elif event.key == pygame.K_DOWN:
                     self._codex_scroll += 40
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                idx = ui.codex_tab_at(*event.pos)
+                if idx != -1 and idx != self._codex_tab:
+                    self._codex_tab = idx
+                    self._codex_scroll = 0
+            elif event.type == pygame.MOUSEWHEEL:
+                self._codex_scroll = max(0, self._codex_scroll - event.y * 40)
         elif self.state == "PAUSED":
             self._handle_pause_event(event)
         elif self.state == "PLAYING":
@@ -1615,7 +1634,7 @@ class Game:
         else:
             cycle = (wave - 1) // 5
             pos = (wave - 1) % 5  # 0–3 for regular waves within a cycle
-            vfloor = min(7, 1 + cycle)
+            vfloor = 1 + cycle  # uncapped — stat scaling and count scaling keep growing
             room_depth = min(3, pos + 1)
             self.enemies = _spawn_wave(room, vfloor, room_depth, exclude_pos=(px, py))
 
@@ -2237,7 +2256,7 @@ class Game:
         self.screen.fill(C.C_BG)
 
         if self.state == "MENU":
-            ui.draw_menu(self.screen, self._highscore, hovered=self._menu_hovered)
+            ui.draw_menu(self.screen, self._highscore, hovered=self._menu_hovered, key_layout=config.KEY_LAYOUT)
             return
 
         if self.state == "CODEX":
