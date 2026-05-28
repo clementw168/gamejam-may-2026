@@ -1279,7 +1279,9 @@ class Game:
             if dps:
                 self.enemy_projectiles.extend(dps)
                 dps.clear()
-        # Void Core relic — pulse queue → piercing arrows
+        # Void Core relic — pulse queue → piercing arrows + visual ring
+        if p._void_queue:
+            self.particles.emit_void_pulse(p.x, p.y)
         for vx2, vy2, vangle in p._void_queue:
             vcore_arrow = Arrow(vx2, vy2, vangle, speed=280, damage=p.arrow_damage, lifetime=0.6)
             vcore_arrow.piercing = True
@@ -1341,10 +1343,14 @@ class Game:
                         self.camera.add_shake(3)
                         break
                     if actual_dmg > 0:
-                        if p.hunter_mark and not p._hunter_mark_used:
+                        hunter_activated = p.hunter_mark and not p._hunter_mark_used
+                        if hunter_activated:
                             actual_dmg *= 3
                             p._hunter_mark_used = True
                         enemy.take_hit(actual_dmg, self.particles)
+                        if hunter_activated:
+                            self.particles.emit_hunter_mark_hit(enemy.x, enemy.y)
+                            self.camera.add_shake(5)
                         if p.arrow_poison:
                             enemy._poison_t = max(enemy._poison_t, 4.0)
                     self.camera.add_shake(3)
@@ -1362,7 +1368,7 @@ class Game:
                 if (ep.x - clone["x"]) ** 2 + (ep.y - clone["y"]) ** 2 < 14**2:
                     ep.alive = False
                     clone["charges"] -= 1
-                    self.particles.emit_hit(ep.x, ep.y, 0)
+                    self.particles.emit_clone_absorb(ep.x, ep.y)
                     absorbed = True
                     break
             if absorbed:
@@ -1370,8 +1376,10 @@ class Game:
             if (ep.x - p.x) ** 2 + (ep.y - p.y) ** 2 < (C.PLAYER_RADIUS + 6) ** 2:
                 ep.alive = False
                 if p.take_damage(ep.damage):
+                    p._contact_hurt = False  # handled here — don't double-fire below
                     self.particles.emit_player_hurt(p.x, p.y)
                     self.camera.add_shake(6)
+                    sounds.play("player_hurt")
                     leech = getattr(ep, "leech_owner", None)
                     if leech is not None and leech.alive:
                         leech.hp = min(leech.max_hp, leech.hp + 3)
@@ -1425,8 +1433,10 @@ class Game:
             if _bda >= 1.0:
                 _bda -= 1.0
                 if p.take_damage(1):
+                    p._contact_hurt = False  # handled here
                     self.particles.emit_player_hurt(p.x, p.y)
                     self.camera.add_shake(4)
+                    sounds.play("player_hurt")
         else:
             _bda = max(0.0, _bda - dt * 0.5)
         self._burn_dot_acc = _bda
@@ -1442,8 +1452,10 @@ class Game:
             if _maa >= 1.0:
                 _maa -= 1.0
                 if p.take_damage(1):
+                    p._contact_hurt = False  # handled here
                     self.particles.emit_player_hurt(p.x, p.y)
                     self.camera.add_shake(3)
+                    sounds.play("player_hurt")
         else:
             _maa = max(0.0, _maa - dt * 0.3)
         self._mat_aura_acc = _maa
@@ -1461,6 +1473,12 @@ class Game:
         self._seal_all_doors(room)
         self._clamp_void_sovereign()
         self._update_enemies_and_drain_queues(dt, room)
+        if p._contact_hurt:
+            p._contact_hurt = False
+            self.particles.emit_player_hurt(p.x, p.y)
+            self.camera.add_shake(6)
+            sounds.play("player_hurt")
+            self._resolve_spiked_shell(drop_coins=False)
         self._resolve_spiked_shell(drop_coins=False)
         self._dot_kill_sweep(drop_coins=False)
         self._steer_and_advance_projectiles(dt, room)
@@ -1686,6 +1704,12 @@ class Game:
         self._seal_all_doors(room)
         self._clamp_void_sovereign()
         self._update_enemies_and_drain_queues(dt, room)
+        if p._contact_hurt:
+            p._contact_hurt = False
+            self.particles.emit_player_hurt(p.x, p.y)
+            self.camera.add_shake(6)
+            sounds.play("player_hurt")
+            self._resolve_spiked_shell()
         self._resolve_spiked_shell()
         self._dot_kill_sweep()
         self._steer_and_advance_projectiles(dt, room)
@@ -1736,6 +1760,7 @@ class Game:
             relic = self._relic_choices[idx]
             relic.apply(self.player)
             self.player.relics.append(relic)
+            sounds.play("upgrade")
         self._relic_choices = []
         self._relic_hovered = -1
         if self._endless_mode:
@@ -1755,6 +1780,7 @@ class Game:
     def _pick_perk(self, idx: int) -> None:
         if 0 <= idx < len(self._upgrade_perks):
             self._upgrade_perks[idx].apply(self.player)
+            sounds.play("upgrade")
         self._upgrade_perks = []
         self._upgrade_hovered = -1
         if self._endless_mode:
@@ -1972,6 +1998,12 @@ class Game:
         self._clamp_void_sovereign()
         self._boss_hint_t = max(0.0, self._boss_hint_t - dt)
         self._update_enemies_and_drain_queues(dt, room)
+        if p._contact_hurt:
+            p._contact_hurt = False
+            self.particles.emit_player_hurt(p.x, p.y)
+            self.camera.add_shake(6)
+            sounds.play("player_hurt")
+            self._resolve_spiked_shell()
         self._resolve_spiked_shell()
         self._dot_kill_sweep()
         self._steer_and_advance_projectiles(dt, room)

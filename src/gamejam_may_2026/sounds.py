@@ -179,6 +179,14 @@ def init() -> None:
             ),
         )
 
+        _sounds["upgrade"] = _load(
+            "upgrade",
+            lambda: _synth(
+                duration=0.35, freq=880, freq_end=1320, shape="sine", volume=0.28, attack=0.010, decay_rate=5,
+                vibrato_hz=8, vibrato_rate=12,
+            ),
+        )
+
     except Exception:
         pass  # if synthesis fails for any reason, silently degrade
 

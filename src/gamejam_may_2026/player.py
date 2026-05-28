@@ -100,6 +100,9 @@ class Player:
         # Shrapnel tips — dead wall-hit arrow positions for game.py
         self._wall_hit_arrows: list = []  # (x, y, angle)
 
+        # Contact-damage signal: set True by take_damage, cleared by game.py each frame
+        self._contact_hurt: bool = False
+
     # ── Effective speed (bloodlust bonus stacked on top of base speed) ────────
     @property
     def _effective_speed(self) -> float:
@@ -273,6 +276,7 @@ class Player:
         self.hp -= amount
         self._iframes = self.iframes_dur
         self._flash = 0.12
+        self._contact_hurt = True
         if self.hp <= 0:
             if config.DEBUG:
                 self.hp = 1  # HP floor — can't die in debug mode
@@ -301,6 +305,48 @@ class Player:
         # Lower shading
         if self._flash <= 0:
             pygame.draw.circle(surf, dark, (sx, sy + self.radius // 3), self.radius // 2)
+
+        t_ms = pygame.time.get_ticks()
+
+        # ── Bloodlust speed aura (warm pulsing ring, brightens per stack) ──────
+        if self._bloodlust_stacks > 0:
+            pulse = 0.5 + 0.5 * math.sin(t_ms / 110.0)
+            aura_alpha = int(55 + 55 * pulse)
+            aura_r = self.radius + 5 + round(3 * pulse)
+            r_comp = min(255, 200 + 55 * self._bloodlust_stacks)
+            g_comp = max(20, 100 - 40 * self._bloodlust_stacks)
+            aura_surf = pygame.Surface((aura_r * 2 + 4, aura_r * 2 + 4), pygame.SRCALPHA)
+            pygame.draw.circle(aura_surf, (r_comp, g_comp, 20, aura_alpha),
+                               (aura_r + 2, aura_r + 2), aura_r, 3)
+            surf.blit(aura_surf, (sx - aura_r - 2, sy - aura_r - 2))
+
+        # ── Overcharged Quiver — golden glow when next shot is ×3 ────────────
+        if self.overcharged_quiver and (self._overcharged_count % 4 == 3):
+            pulse = 0.5 + 0.5 * math.sin(t_ms / 70.0)
+            glow_r = self.radius + 4 + round(2 * pulse)
+            glow_alpha = int(100 + 100 * pulse)
+            glow_surf = pygame.Surface((glow_r * 2 + 4, glow_r * 2 + 4), pygame.SRCALPHA)
+            pygame.draw.circle(glow_surf, (255, 220, 50, glow_alpha),
+                               (glow_r + 2, glow_r + 2), glow_r, 3)
+            surf.blit(glow_surf, (sx - glow_r - 2, sy - glow_r - 2))
+
+        # ── Spiked Shell — faint static ring at player body (status indicator) ─
+        if self.spiked_shell:
+            pulse = 0.5 + 0.5 * math.sin(t_ms / 200.0)
+            spike_alpha = int(30 + 20 * pulse)
+            spike_r = self.radius + 6
+            spike_surf = pygame.Surface((spike_r * 2 + 4, spike_r * 2 + 4), pygame.SRCALPHA)
+            pygame.draw.circle(spike_surf, (255, 140, 50, spike_alpha),
+                               (spike_r + 2, spike_r + 2), spike_r, 2)
+            surf.blit(spike_surf, (sx - spike_r - 2, sy - spike_r - 2))
+
+        # ── Hunter's Mark — small golden indicator dot above player ──────────
+        if self.hunter_mark and not self._hunter_mark_used:
+            pulse = 0.5 + 0.5 * math.sin(t_ms / 160.0)
+            mark_alpha = int(150 + 105 * pulse)
+            mark_surf = pygame.Surface((10, 10), pygame.SRCALPHA)
+            pygame.draw.circle(mark_surf, (255, 210, 40, mark_alpha), (5, 5), 4)
+            surf.blit(mark_surf, (sx - 5, sy - self.radius - 14))
 
         # Aim dot (shows direction)
         ax = sx + round(math.cos(self.aim_angle) * (self.radius - 4))

@@ -195,3 +195,22 @@ class ParticleSystem:
         self.emit(x, y, 35, [C.C_SOVEREIGN_SHOT, (80, 20, 160), (200, 130, 255)], 250, 0, 180, 1.00, size=7.0)
         self.emit(x, y, 18, [C.C_SOVEREIGN, (130, 55, 255), (255, 255, 255)], 100, 0, 180, 1.50, size=4.0)
         self.emit(x, y, 10, [(255, 255, 255), (200, 150, 255)], 60, 0, 180, 0.80, size=2.5)
+
+    # ── Relic / ability feedback ───────────────────────────────────────────────
+
+    def emit_void_pulse(self, x: float, y: float) -> None:
+        """Expanding ring of sparks when Void Core fires its 8-way pulse."""
+        for i in range(16):
+            a = i * math.pi / 8
+            self.emit(x, y, 2, [(80, 20, 160), (130, 55, 255), (200, 150, 255)],
+                      130, math.degrees(a), 12, 0.38, size=2.5)
+
+    def emit_clone_absorb(self, x: float, y: float) -> None:
+        """Bright burst when a Temporal Blur clone intercepts a projectile."""
+        self.emit(x, y, 14, [(140, 190, 255), (200, 230, 255), (255, 255, 255)],
+                  200, 0, 180, 0.50, size=3.5)
+
+    def emit_hunter_mark_hit(self, x: float, y: float) -> None:
+        """Golden starburst when Hunter's Mark triples damage on first hit."""
+        self.emit(x, y, 16, [(255, 210, 50), (255, 160, 20), (255, 255, 180)],
+                  220, 0, 180, 0.55, size=4.0, gravity=80)
