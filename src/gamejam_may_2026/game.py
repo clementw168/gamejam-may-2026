@@ -15,6 +15,7 @@ ENDLESS_SELECT — endless mode wave-selection screen
 ENDLESS       — endless mode combat (sealed room, infinite waves)
 ENDLESS_BETWEEN — between-wave overlay (reward display, press Space to continue)
 ENDLESS_DEAD  — endless mode death screen
+TUTORIAL      — guided tutorial fight (sealed room, fresh player, step-by-step hints)
 """
 
 from __future__ import annotations
@@ -724,6 +725,11 @@ class Game:
         self._arena_relic_selected: int = -1  # -1 = no relic, 0..19 = RELIC_POOL index
         self._arena_relic_hovered: int = -2   # -2 = nothing, -1 = no relic btn, 0..19 = relic
 
+        # Tutorial mode state
+        self._tutorial_step: int = 0
+        self._tutorial_t: float = 0.0
+        self._tutorial_start_pos: tuple[float, float] = (0.0, 0.0)
+
         # Endless mode state
         self._endless_mode: bool = False  # True while inside an endless run
         self._endless_wave: int = 1  # current wave being fought
@@ -817,7 +823,7 @@ class Game:
         # Escape toggles pause from any live gameplay state
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             if self.state in ("PLAYING", "UPGRADE", "SHOP", "FLOOR_CLEAR", "RELIC", "ARENA",
-                              "ENDLESS", "ENDLESS_BETWEEN"):
+                              "ENDLESS", "ENDLESS_BETWEEN", "TUTORIAL"):
                 self._pre_pause_state = self.state
                 self.state = "PAUSED"
                 return
@@ -846,6 +852,8 @@ class Game:
                         self._codex_tab = 0
                         self._codex_scroll = 0
                         self.state = "CODEX"
+                    elif idx == 4:
+                        self._start_tutorial()
             elif event.type == pygame.KEYDOWN:
                 k = event.key
                 if k == pygame.K_RETURN or k == pygame.K_KP_ENTER or k == pygame.K_SPACE:
@@ -862,7 +870,7 @@ class Game:
                     else:
                         self._new_game()
                 elif k == pygame.K_UP or k == pygame.K_DOWN:
-                    n = 4
+                    n = 5
                     cur = self._menu_hovered if self._menu_hovered >= 0 else 0
                     self._menu_hovered = (cur + (1 if k == pygame.K_DOWN else -1)) % n
                 # Legacy shortcuts
@@ -876,6 +884,8 @@ class Game:
                     self._codex_tab = 0
                     self._codex_scroll = 0
                     self.state = "CODEX"
+                elif k == pygame.K_t:
+                    self._start_tutorial()
         elif self.state == "ARENA_SELECT":
             self._handle_arena_select_event(event)
         elif self.state == "ARENA_RELIC_SELECT":
@@ -898,6 +908,11 @@ class Game:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
                 self._endless_mode = False
                 self.state = "MENU"
+        elif self.state == "TUTORIAL":
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_r and self._tutorial_step == 5:
+                self.state = "MENU"
+            else:
+                self.player.handle_event(event, self.particles)
         elif self.state == "CODEX":
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
@@ -1210,6 +1225,52 @@ class Game:
 
         self.state = "ARENA"
 
+    def _start_tutorial(self) -> None:
+        """Set up a sealed tutorial room with a fresh player and no enemies."""
+        self.dungeon = Dungeon(floor=1)
+        dr = self.dungeon.current
+        room = dr.room
+
+        px, py = room.find_spawn_near_centre(float(C.PLAYER_RADIUS))
+        self.player = Player(px, py)
+        self.player.max_hp = 5
+        self.player.hp = 5
+
+        self.enemies = []
+        self.enemy_projectiles = []
+        self.coins = []
+        self.chests = []
+        self.burn_patches = []
+        self.camera = Camera()
+        self.particles = ParticleSystem()
+        self._blur_clones = []
+        self._trans_t = 0.0
+        self._trans_wdx = 0.0
+        self._trans_wdy = 0.0
+        self._trans_next = None
+        self._trans_old_room = None
+        self._boss_hint_t = 0.0
+        self._boss_hint_dir = "N"
+        self._show_staircase = False
+        self._staircase_t = 0.0
+        self._void_flash_t = 0.0
+        self._spiked_shell_flash_t = 0.0
+        self._burn_dot_acc = 0.0
+        self._mat_aura_acc = 0.0
+        self._upgrade_perks = []
+        self._upgrade_hovered = -1
+        self._upgrade_open_ms = 0
+        self._relic_choices = []
+        self._relic_hovered = -1
+        self._shop_hovered = -1
+
+        self._tutorial_step = 0
+        self._tutorial_t = 0.0
+        self._tutorial_start_pos = (px, py)
+        self._pre_pause_state = "TUTORIAL"
+
+        self.state = "TUTORIAL"
+
     # ── Shared combat helpers (arena / endless / playing) ─────────────────────
 
     def _apply_post_player_effects(
@@ -1498,6 +1559,72 @@ class Game:
         self._update_burn_and_aura(dt)
         if not self.enemies:
             self.state = "ARENA_WIN"
+
+    # ── Tutorial mode ─────────────────────────────────────────────────────────
+
+    def _update_tutorial(self, dt: float) -> None:
+        """Drive tutorial step logic and shared combat updates."""
+        room = self._room
+        p = self.player
+        prev_px, prev_py, was_dashing = p.x, p.y, p._dashing
+        p.update(dt, room, self.particles)
+
+        # Never game-over in tutorial: restore HP and grant 2 s iframes
+        if p.dead:
+            p.hp = p.max_hp
+            p._iframes = 2.0
+            p.dead = False
+
+        self._apply_post_player_effects(dt, was_dashing, prev_px, prev_py, drop_coins=True)
+        self._seal_all_doors(room)
+        self._update_enemies_and_drain_queues(dt, room)
+        if p._contact_hurt:
+            p._contact_hurt = False
+            self.particles.emit_player_hurt(p.x, p.y)
+            self.camera.add_shake(6)
+            sounds.play("player_hurt")
+        self._dot_kill_sweep(drop_coins=True)
+        self._steer_and_advance_projectiles(dt, room)
+        self._resolve_arrow_collisions(drop_coins=True)
+        self._resolve_projectile_collisions(drop_coins=True)
+        self._prune_entities()
+        self._collect_coins(dt)
+        self._update_burn_and_aura(dt)
+
+        self._tutorial_t += dt
+        step = self._tutorial_step
+
+        if step == 0:
+            # Advance when player moves >= 60 px from spawn
+            sx, sy = self._tutorial_start_pos
+            if (p.x - sx) ** 2 + (p.y - sy) ** 2 >= 60.0 ** 2:
+                self._tutorial_step = 1
+                self._tutorial_t = 0.0
+        elif step == 1:
+            # Advance when player dashes
+            if p._dashing:
+                self._tutorial_step = 2
+                self._tutorial_t = 0.0
+                # Spawn one GoblinRunner away from player
+                positions = room.get_spawn_positions(1, min_dist_from_centre=80.0, exclude_pos=(p.x, p.y))
+                ex, ey = positions[0] if positions else room.find_spawn_near_centre(30.0)
+                self.enemies = [GoblinRunner(ex, ey, floor=1)]
+        elif step == 2:
+            # Advance after 2.5 seconds (give player time to read health info)
+            if self._tutorial_t >= 2.5:
+                self._tutorial_step = 3
+                self._tutorial_t = 0.0
+        elif step == 3:
+            # Advance when all enemies are dead
+            if not self.enemies:
+                self._tutorial_step = 4
+                self._tutorial_t = 0.0
+        elif step == 4:
+            # Advance when all coins collected OR 5 s elapsed
+            if not self.coins or self._tutorial_t >= 5.0:
+                self._tutorial_step = 5
+                self._tutorial_t = 0.0
+        # step 5 = DONE; player presses R to return to menu (handled in handle_event)
 
     # ── Endless mode ─────────────────────────────────────────────────────────
     _ENDLESS_MAX_START = 35  # 7 cycles × 5 waves
@@ -1959,6 +2086,8 @@ class Game:
             self._update_arena(dt)
         elif self.state == "ENDLESS":
             self._update_endless(dt)
+        elif self.state == "TUTORIAL":
+            self._update_tutorial(dt)
         # UPGRADE, DEAD, ARENA_WIN, ARENA_DEAD, ENDLESS_BETWEEN, ENDLESS_DEAD:
         # gameplay frozen — particles still tick
         self.particles.update(dt)
@@ -2284,6 +2413,7 @@ class Game:
         # ── Boss HP bar ───────────────────────────────────────────────────────
         _arena_states = ("ARENA", "ARENA_WIN", "ARENA_DEAD")
         _endless_states = ("ENDLESS", "ENDLESS_BETWEEN", "ENDLESS_DEAD")
+        _tutorial_states = ("TUTORIAL",)
         show_boss_hp = (
             (self.state == "PLAYING" and self._dr.is_boss)
             or self.state in _arena_states
@@ -2323,6 +2453,9 @@ class Game:
                 enemies_left=len(self.enemies),
                 mode_label=label,
             )
+        elif self.state in _tutorial_states:
+            ui.draw_hud(self.screen, self.player, mode_label="Tutorial")
+            ui.draw_tutorial_overlay(self.screen, self._tutorial_step, config.KEY_LAYOUT)
         else:
             ui.draw_hud(
                 self.screen,
@@ -2333,8 +2466,8 @@ class Game:
                 debug=config.DEBUG,
             )
 
-        # ── Minimap (not shown in arena or endless) ───────────────────────────
-        if self.state not in _arena_states and self.state not in _endless_states:
+        # ── Minimap (not shown in arena, endless, or tutorial) ───────────────
+        if self.state not in _arena_states and self.state not in _endless_states and self.state not in _tutorial_states:
             ui.draw_minimap(self.screen, self.dungeon)
 
         # ── State-specific overlays ───────────────────────────────────────────

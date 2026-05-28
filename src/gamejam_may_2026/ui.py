@@ -672,7 +672,7 @@ def draw_shop_screen(
 
 _MENU_BTN_W = 360
 _MENU_BTN_H = 64
-_MENU_BTN_GAP = 16
+_MENU_BTN_GAP = 10
 
 # Colours per button index: (normal_bg, hover_bg, normal_bd, hover_bd, normal_lbl, hover_lbl)
 _MENU_BTN_STYLES = [
@@ -684,13 +684,16 @@ _MENU_BTN_STYLES = [
     ((12, 42, 52), (18, 78, 100), (28, 110, 140), (60, 200, 240), (90, 190, 220), (180, 240, 255)),
     # Codex — amber
     ((44, 34, 12), (80, 60, 18), (110, 80, 28), (200, 155, 55), (185, 155, 90), (240, 210, 120)),
+    # Tutorial — warm coral/rose
+    ((62, 22, 28), (110, 38, 46), (170, 68, 78), (245, 120, 110), (220, 140, 130), (255, 200, 190)),
 ]
-_MENU_BTN_LABELS = ["Dungeon Mode", "Arena Mode", "Endless Mode", "Codex"]
+_MENU_BTN_LABELS = ["Dungeon Mode", "Arena Mode", "Endless Mode", "Codex", "Tutorial"]
 _MENU_BTN_SUBLABELS = [
     "7-floor roguelite run",
     "1v1 practice fights",
     "Survive infinite waves",
     "View enemies & relics",
+    "Learn the basics",
 ]
 
 _KEY_CHIP_W = 82
@@ -701,16 +704,16 @@ _KEY_LAYOUTS_LABEL = {"zqsd": "ZQSD", "wasd": "WASD", "arrows": "Arrows"}
 
 
 def _menu_button_rects() -> list[pygame.Rect]:
-    """Return the four main-menu button rects (Dungeon, Arena, Endless, Codex)."""
-    n = 4
+    """Return the five main-menu button rects (Dungeon, Arena, Endless, Codex, Tutorial)."""
+    n = 5
     total_h = n * _MENU_BTN_H + (n - 1) * _MENU_BTN_GAP
-    top = C.SCREEN_H // 2 - total_h // 2 + 20  # slight downward nudge from centre
+    top = C.SCREEN_H // 2 - total_h // 2 + 5
     bx = C.SCREEN_W // 2 - _MENU_BTN_W // 2
     return [pygame.Rect(bx, top + i * (_MENU_BTN_H + _MENU_BTN_GAP), _MENU_BTN_W, _MENU_BTN_H) for i in range(n)]
 
 
 def menu_button_at(mx: int, my: int) -> int:
-    """Return 0/1/2 if (mx, my) hits that button, else -1."""
+    """Return 0-4 if (mx, my) hits that button, else -1."""
     for i, r in enumerate(_menu_button_rects()):
         if r.collidepoint(mx, my):
             return i
@@ -719,7 +722,7 @@ def menu_button_at(mx: int, my: int) -> int:
 
 def _key_chip_rects() -> list[pygame.Rect]:
     rects = _menu_button_rects()
-    ctrl_y = rects[-1].bottom + 26
+    ctrl_y = rects[-1].bottom + 20
     chip_y = ctrl_y + 24
     total_w = 3 * _KEY_CHIP_W + 2 * _KEY_CHIP_GAP
     left = C.SCREEN_W // 2 - total_w // 2
@@ -776,7 +779,7 @@ def draw_menu(surf: pygame.Surface, highscore: dict, hovered: int = -1, key_layo
         surf.blit(sub, (rect.centerx - sub.get_width() // 2, rect.y + 38))
 
     # ── Quick controls strip ──────────────────────────────────────────────────
-    ctrl_y = rects[-1].bottom + 26
+    ctrl_y = rects[-1].bottom + 20
     ctrl_fnt = _font(15)
     active_move = {"zqsd": "ZQSD", "wasd": "WASD", "arrows": "Arrows"}.get(key_layout, "ZQSD")
     controls = [
@@ -1702,6 +1705,40 @@ def draw_arena_result(
 
     hint = _font(22).render("Press  R  to return to menu", True, (165, 148, 115))
     surf.blit(hint, (cx - hint.get_width() // 2, cy - 10))
+
+
+# ── Tutorial overlay ─────────────────────────────────────────────────────────
+
+def draw_tutorial_overlay(surf: pygame.Surface, step: int, key_layout: str) -> None:
+    """Draw the tutorial hint banner at the top of the playfield."""
+    panel_h = 64
+    panel = pygame.Surface((C.SCREEN_W, panel_h), pygame.SRCALPHA)
+    panel.fill((10, 10, 20, 200))
+    surf.blit(panel, (0, 0))
+    pygame.draw.line(surf, (80, 60, 40), (0, panel_h - 1), (C.SCREEN_W, panel_h - 1), 2)
+
+    cx = C.SCREEN_W // 2
+    cy = panel_h // 2
+
+    if step == 0:
+        move_keys = {"zqsd": "Z Q S D", "wasd": "W A S D", "arrows": "← ↑ ↓ →"}.get(key_layout, "Z Q S D")
+        text = _font(22, bold=True).render(f"Use  {move_keys}  to move around", True, (220, 240, 210))
+        surf.blit(text, (cx - text.get_width() // 2, cy - text.get_height() // 2))
+    elif step == 1:
+        text = _font(22, bold=True).render("Press  Space  to dash!", True, (180, 230, 255))
+        surf.blit(text, (cx - text.get_width() // 2, cy - text.get_height() // 2))
+    elif step == 2:
+        text = _font(20).render("The hearts and coin count bottom-left are your lives — lose one if an enemy hits you.", True, (230, 160, 140))
+        surf.blit(text, (cx - text.get_width() // 2, cy - text.get_height() // 2))
+    elif step == 3:
+        text = _font(20).render("Left Click to shoot  —  Defeat the Goblin Runner!", True, (200, 220, 255))
+        surf.blit(text, (cx - text.get_width() // 2, cy - text.get_height() // 2))
+    elif step == 4:
+        text = _font(20).render("Collect the coins — use them in shops to buy lives and upgrades!", True, (255, 220, 80))
+        surf.blit(text, (cx - text.get_width() // 2, cy - text.get_height() // 2))
+    elif step == 5:
+        text = _font(24, bold=True).render("You're ready!  Press  R  to return to the menu.", True, (255, 210, 60))
+        surf.blit(text, (cx - text.get_width() // 2, cy - text.get_height() // 2))
 
 
 # ── Endless Mode UI ───────────────────────────────────────────────────────────
