@@ -92,26 +92,60 @@ class Enemy:
             pygame.draw.circle(surf, (140, 10, 10), (sx, sy), self.radius + 3, 2)
 
     def _move(self, dx: float, dy: float, room: Room) -> None:
-        # Slow status: reduce movement to 40 %
         if self._slow_t > 0:
             dx *= 0.4
             dy *= 0.4
-        # Sub-step to avoid large-step wall gaps and diagonal tunnelling.
+        total = math.hypot(dx, dy)
+        if total < 0.001:
+            return
         _SUBSTEP = 4.0
-        steps = max(1, math.ceil(abs(dx) / _SUBSTEP))
-        sdx = dx / steps
+        steps = max(1, math.ceil(total / _SUBSTEP))
+        sdx, sdy = dx / steps, dy / steps
         for _ in range(steps):
-            if room.is_circle_walkable(self.x + sdx, self.y, self.radius):
+            if room.is_circle_walkable(self.x + sdx, self.y + sdy, self.radius):
                 self.x += sdx
-            else:
-                break
-        steps = max(1, math.ceil(abs(dy) / _SUBSTEP))
-        sdy = dy / steps
-        for _ in range(steps):
-            if room.is_circle_walkable(self.x, self.y + sdy, self.radius):
                 self.y += sdy
-            else:
+                continue
+            # Blocked: get contact normal (points away from wall).
+            nx, ny = self._contact_normal(self.x + sdx, self.y + sdy, room)
+            if nx == 0.0 and ny == 0.0:
                 break
+            step_len = math.hypot(sdx, sdy)
+            # Try sliding along wall tangent at full speed.
+            dot = sdx * nx + sdy * ny
+            slx, sly = sdx - dot * nx, sdy - dot * ny
+            sl_len = math.hypot(slx, sly)
+            if sl_len > 0.001:
+                slx, sly = slx / sl_len * step_len, sly / sl_len * step_len
+                if room.is_circle_walkable(self.x + slx, self.y + sly, self.radius):
+                    self.x += slx
+                    self.y += sly
+                    continue
+            # Slide also blocked (wedged in corner): push away from wall so the
+            # enemy escapes the corner and steering can find a clear path next frame.
+            self.x += nx * step_len
+            self.y += ny * step_len
+
+    def _contact_normal(self, px: float, py: float, room: Room) -> tuple[float, float]:
+        """Outward unit normal from the deepest wall contact at position (px, py)."""
+        tile_l = max(0, int((px - self.radius) // C.TILE_SIZE))
+        tile_r = min(C.ROOM_TILE_W - 1, int((px + self.radius) // C.TILE_SIZE))
+        tile_t = max(0, int((py - self.radius) // C.TILE_SIZE))
+        tile_b = min(C.ROOM_TILE_H - 1, int((py + self.radius) // C.TILE_SIZE))
+        max_overlap, best_nx, best_ny = 0.0, 0.0, 0.0
+        for _r in range(tile_t, tile_b + 1):
+            for _c in range(tile_l, tile_r + 1):
+                if room.tiles[_r][_c] != C.TILE_WALL:
+                    continue
+                close_x = max(_c * C.TILE_SIZE, min(px, (_c + 1) * C.TILE_SIZE))
+                close_y = max(_r * C.TILE_SIZE, min(py, (_r + 1) * C.TILE_SIZE))
+                ddx, ddy = px - close_x, py - close_y
+                dist = math.hypot(ddx, ddy)
+                overlap = self.radius - dist
+                if overlap > max_overlap:
+                    max_overlap = overlap
+                    best_nx, best_ny = (ddx / dist, ddy / dist) if dist > 0.0 else (0.0, -1.0)
+        return best_nx, best_ny
 
     def _steer_toward(self, tx: float, ty: float, room: Room) -> tuple[float, float]:
         """8-direction wall-aware steering toward (tx, ty). Returns (vx, vy) at self.speed."""
