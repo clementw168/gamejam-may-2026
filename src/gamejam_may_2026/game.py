@@ -1288,16 +1288,12 @@ class Game:
                 for bx, by in pq:
                     self.burn_patches.append(BurnPatch(bx, by))
                 pq.clear()
-        # VoidShrieker hit-shake + death-burst queues
+        # VoidShrieker hit-shake
         for e in self.enemies:
             if getattr(e, "_hit_shake", False):
                 e._hit_shake = False  # type: ignore[attr-defined]
                 self.camera.add_shake(4)
                 self._void_flash_t = max(self._void_flash_t, 0.25)
-            dps = getattr(e, "_death_projs", None)
-            if dps:
-                self.enemy_projectiles.extend(dps)
-                dps.clear()
         # Void Core relic — pulse queue → piercing arrows + visual ring
         if p._void_queue:
             self.particles.emit_void_pulse(p.x, p.y)
@@ -1418,13 +1414,8 @@ class Game:
                     self._on_enemy_killed(e, drop_coins=drop_coins)
 
     def _prune_entities(self) -> None:
-        """Prune spent blur clones; drain late VoidShrieker bursts; remove dead enemies and projectiles."""
+        """Prune spent blur clones; remove dead enemies and projectiles."""
         self._blur_clones = [c for c in self._blur_clones if c["charges"] > 0]
-        for e in self.enemies:
-            dps = getattr(e, "_death_projs", None)
-            if dps:
-                self.enemy_projectiles.extend(dps)
-                dps.clear()
         self.enemies = [e for e in self.enemies if e.alive]
         self.enemy_projectiles = [ep for ep in self.enemy_projectiles if ep.alive]
 
@@ -2224,6 +2215,12 @@ class Game:
         p = self.player
         if drop_coins:
             self._drop_coins(enemy)
+        if isinstance(enemy, VoidShrieker):
+            for i in range(8):
+                a = math.radians(i * 45.0)
+                self.enemy_projectiles.append(
+                    EnemyProjectile(enemy.x, enemy.y, a, speed=195, color=C.C_VOID_SHOT, damage=1, lifetime=2.2)
+                )
         if p.echoing_shot:
             living = [e for e in self.enemies if e.alive and e is not enemy]
             if living:

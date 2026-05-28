@@ -1580,27 +1580,8 @@ class VoidShrieker(Enemy):
         self._t = random.uniform(0.0, 6.28)
         self._contact_cd = 0.0
         self._hit_shake = False  # game.py reads and clears this
-        self._death_projs: list[EnemyProjectile] = []
         self._wander_angle = random.uniform(0.0, math.pi * 2)
         self._wander_t = 0.0
-
-    def take_hit(self, damage: int, particles: ParticleSystem) -> None:
-        super().take_hit(damage, particles)
-        if not self.alive:
-            # Death burst: 8 EnemyProjectiles in a full ring
-            for i in range(8):
-                a = math.radians(i * 45.0)
-                self._death_projs.append(
-                    EnemyProjectile(
-                        self.x,
-                        self.y,
-                        a,
-                        speed=195,
-                        color=C.C_VOID_SHOT,
-                        damage=1,
-                        lifetime=2.2,
-                    )
-                )
 
     def update(
         self,
