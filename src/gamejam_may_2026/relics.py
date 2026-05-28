@@ -176,7 +176,7 @@ RELIC_POOL: list[Relic] = [
         "💀",
         _curse_of_greed,
     ),
-    Relic("petrified_heart", "Petrified Heart", "Cannot over-heal. Take 50 % less damage.", "🗿", _petrified_heart),
+    Relic("petrified_heart", "Petrified Heart", "Take 50 % less damage.", "🗿", _petrified_heart),
     Relic("hunters_mark", "Hunter's Mark", "The first enemy hit per room takes 3× damage.", "🎯", _hunters_mark),
     Relic("void_core", "Void Core", "Every 5 s, emit a damaging 8-way pulse.", "🌑", _void_core),
 ]
