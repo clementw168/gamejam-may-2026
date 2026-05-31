@@ -93,6 +93,14 @@ def _save_highscore(score: dict) -> None:
         pass  # non-fatal — best-effort save
 
 
+def _clear_highscore() -> None:
+    try:
+        if _SCORE_FILE.exists():
+            _SCORE_FILE.unlink()
+    except Exception:
+        pass
+
+
 def _is_better(new: dict, old: dict) -> bool:
     """Primary: floors cleared (more = better).  Tiebreak: rooms, then coins."""
     return (new["floors"], new["rooms"], new["coins"]) > (old["floors"], old["rooms"], old["coins"])
@@ -838,6 +846,10 @@ class Game:
                 layout = ui.key_layout_chip_at(*event.pos)
                 if layout is not None:
                     config.KEY_LAYOUT = layout
+                elif ui.clear_record_button_at(*event.pos, self._highscore):
+                    _clear_highscore()
+                    self._highscore = dict(_SCORE_ZERO)
+                    self._new_highscore = False
                 else:
                     idx = ui.menu_button_at(*event.pos)
                     if idx == 0:
@@ -1595,14 +1607,14 @@ class Game:
         step = self._tutorial_step
 
         if step == 0:
-            # Advance when player moves >= 60 px from spawn
+            # Advance when player moves >= 60 px from spawn, with 2 s minimum to read the hint
             sx, sy = self._tutorial_start_pos
-            if (p.x - sx) ** 2 + (p.y - sy) ** 2 >= 60.0 ** 2:
+            if self._tutorial_t >= 2.0 and (p.x - sx) ** 2 + (p.y - sy) ** 2 >= 60.0 ** 2:
                 self._tutorial_step = 1
                 self._tutorial_t = 0.0
         elif step == 1:
-            # Advance when player dashes
-            if p._dashing:
+            # Advance when player dashes, with 2 s minimum to read the hint
+            if self._tutorial_t >= 2.0 and p._dashing:
                 self._tutorial_step = 2
                 self._tutorial_t = 0.0
                 # Spawn one GoblinRunner away from player
@@ -1610,18 +1622,18 @@ class Game:
                 ex, ey = positions[0] if positions else room.find_spawn_near_centre(30.0)
                 self.enemies = [GoblinRunner(ex, ey, floor=1)]
         elif step == 2:
-            # Advance after 2.5 seconds (give player time to read health info)
-            if self._tutorial_t >= 2.5:
+            # Advance after 5 seconds (give player time to read health info)
+            if self._tutorial_t >= 5.0:
                 self._tutorial_step = 3
                 self._tutorial_t = 0.0
         elif step == 3:
-            # Advance when all enemies are dead
-            if not self.enemies:
+            # Advance when all enemies are dead, with 1 s minimum to read the hint
+            if self._tutorial_t >= 1.0 and not self.enemies:
                 self._tutorial_step = 4
                 self._tutorial_t = 0.0
         elif step == 4:
-            # Advance when all coins collected OR 5 s elapsed
-            if not self.coins or self._tutorial_t >= 5.0:
+            # Advance when all coins collected OR 10 s elapsed
+            if not self.coins or self._tutorial_t >= 10.0:
                 self._tutorial_step = 5
                 self._tutorial_t = 0.0
         # step 5 = DONE; player presses R to return to menu (handled in handle_event)

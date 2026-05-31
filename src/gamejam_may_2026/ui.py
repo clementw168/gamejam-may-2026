@@ -5,10 +5,10 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Any
 
-import pygame
-
+import config
 import constants as C
 import icons
+import pygame
 
 if TYPE_CHECKING:
     from camera import Camera
@@ -702,8 +702,16 @@ _MENU_BTN_SUBLABELS = [
 _KEY_CHIP_W = 82
 _KEY_CHIP_H = 26
 _KEY_CHIP_GAP = 8
-_KEY_LAYOUTS_ORDER = ["zqsd", "wasd", "arrows"]
-_KEY_LAYOUTS_LABEL = {"zqsd": "ZQSD", "wasd": "WASD", "arrows": "Arrows"}
+
+
+def _key_layouts_order() -> list[str]:
+    return ["wasd", "arrows"] if config.IS_WEB else ["zqsd", "wasd", "arrows"]
+
+
+def _key_layout_label(name: str) -> str:
+    if name == "wasd" and config.IS_WEB:
+        return "ZQSD/WASD"
+    return {"zqsd": "ZQSD", "wasd": "WASD", "arrows": "Arrows"}[name]
 
 
 def _menu_button_rects() -> list[pygame.Rect]:
@@ -724,22 +732,37 @@ def menu_button_at(mx: int, my: int) -> int:
 
 
 def _key_chip_rects() -> list[pygame.Rect]:
+    layouts = _key_layouts_order()
+    n = len(layouts)
     rects = _menu_button_rects()
     ctrl_y = rects[-1].bottom + 20
     chip_y = ctrl_y + 24
-    total_w = 3 * _KEY_CHIP_W + 2 * _KEY_CHIP_GAP
+    total_w = n * _KEY_CHIP_W + (n - 1) * _KEY_CHIP_GAP
     left = C.SCREEN_W // 2 - total_w // 2
-    return [
-        pygame.Rect(left + i * (_KEY_CHIP_W + _KEY_CHIP_GAP), chip_y, _KEY_CHIP_W, _KEY_CHIP_H)
-        for i in range(3)
-    ]
+    return [pygame.Rect(left + i * (_KEY_CHIP_W + _KEY_CHIP_GAP), chip_y, _KEY_CHIP_W, _KEY_CHIP_H) for i in range(n)]
+
+
+def _clear_record_rect(best_top: int) -> pygame.Rect:
+    w, h = 130, 22
+    cx = C.SCREEN_W // 2
+    return pygame.Rect(cx - w // 2, best_top + 46, w, h)
+
+
+def clear_record_button_at(mx: int, my: int, highscore: dict) -> bool:
+    """Return True if (mx, my) hits the clear-record button and a record exists."""
+    if highscore.get("floors", 0) <= 0:
+        return False
+    chip_rects = _key_chip_rects()
+    best_top = chip_rects[0].bottom + 14
+    return _clear_record_rect(best_top).collidepoint(mx, my)
 
 
 def key_layout_chip_at(mx: int, my: int) -> str | None:
     """Return layout name ("zqsd"/"wasd"/"arrows") if (mx, my) hits a chip, else None."""
+    layouts = _key_layouts_order()
     for i, r in enumerate(_key_chip_rects()):
         if r.collidepoint(mx, my):
-            return _KEY_LAYOUTS_ORDER[i]
+            return layouts[i]
     return None
 
 
@@ -784,7 +807,7 @@ def draw_menu(surf: pygame.Surface, highscore: dict, hovered: int = -1, key_layo
     # ── Quick controls strip ──────────────────────────────────────────────────
     ctrl_y = rects[-1].bottom + 20
     ctrl_fnt = _font(15)
-    active_move = {"zqsd": "ZQSD", "wasd": "WASD", "arrows": "Arrows"}.get(key_layout, "ZQSD")
+    active_move = _key_layout_label(key_layout) if key_layout in ("zqsd", "wasd", "arrows") else "ZQSD"
     controls = [
         ("Move", active_move),
         ("Shoot", "Left Click"),
@@ -800,17 +823,20 @@ def draw_menu(surf: pygame.Surface, highscore: dict, hovered: int = -1, key_layo
 
     # ── Key layout toggle chips ───────────────────────────────────────────────
     chip_rects = _key_chip_rects()
+    layouts = _key_layouts_order()
     keys_lbl = _font(14).render("Keys:", True, (65, 100, 55))
-    surf.blit(keys_lbl, (chip_rects[0].x - keys_lbl.get_width() - 8, chip_rects[0].centery - keys_lbl.get_height() // 2))
+    surf.blit(
+        keys_lbl, (chip_rects[0].x - keys_lbl.get_width() - 8, chip_rects[0].centery - keys_lbl.get_height() // 2)
+    )
     for i, r in enumerate(chip_rects):
-        name = _KEY_LAYOUTS_ORDER[i]
+        name = layouts[i]
         active = name == key_layout
         bg = (52, 96, 40) if active else (22, 38, 18)
         bd = (100, 220, 80) if active else (45, 80, 35)
         lbl_c = (220, 255, 195) if active else (80, 130, 65)
         pygame.draw.rect(surf, bg, r, border_radius=5)
         pygame.draw.rect(surf, bd, r, 2, border_radius=5)
-        chip_txt = _font(14, bold=active).render(_KEY_LAYOUTS_LABEL[name], True, lbl_c)
+        chip_txt = _font(14, bold=active).render(_key_layout_label(name), True, lbl_c)
         surf.blit(chip_txt, (r.centerx - chip_txt.get_width() // 2, r.centery - chip_txt.get_height() // 2))
 
     # ── Best run ──────────────────────────────────────────────────────────────
@@ -827,9 +853,33 @@ def draw_menu(surf: pygame.Surface, highscore: dict, hovered: int = -1, key_layo
             (165, 145, 75),
         )
         surf.blit(bi, (cx - bi.get_width() // 2, best_top + 22))
+
+        # Small "clear record" button
+        clr_rect = _clear_record_rect(best_top)
+        mx, my = pygame.mouse.get_pos()
+        clr_hov = clr_rect.collidepoint(mx, my)
+        clr_bg = (90, 30, 30) if clr_hov else (50, 20, 20)
+        clr_bd = (200, 80, 80) if clr_hov else (110, 50, 50)
+        clr_col = (255, 120, 100) if clr_hov else (160, 80, 70)
+        pygame.draw.rect(surf, clr_bg, clr_rect, border_radius=5)
+        pygame.draw.rect(surf, clr_bd, clr_rect, 1, border_radius=5)
+        clr_lbl = _font(13).render("✕  Clear record", True, clr_col)
+        surf.blit(clr_lbl, (clr_rect.centerx - clr_lbl.get_width() // 2, clr_rect.centery - clr_lbl.get_height() // 2))
     else:
         no_hs = _font(15).render("No runs yet — be the first!", True, (65, 100, 55))
         surf.blit(no_hs, (cx - no_hs.get_width() // 2, best_top + 4))
+
+    # ── Credits ───────────────────────────────────────────────────────────────
+    credit_lines = [
+        ("Coded by Clement Wang · May 2026", False),
+        ("Game jam hosted by Guillaume Levy", False),
+    ]
+    rx = C.SCREEN_W - 28
+    ry = C.SCREEN_H - 28 - len(credit_lines) * 20
+    for text, bold in credit_lines:
+        s = _font(12, bold=bold).render(text, True, (50, 80, 42))
+        surf.blit(s, (rx - s.get_width(), ry))
+        ry += 20
 
 
 # ── Floor-clear overlay ───────────────────────────────────────────────────────
@@ -850,10 +900,10 @@ def draw_floor_clear(surf: pygame.Surface, floor: int) -> None:
     sub = _font(24).render("The ancient staircase has opened…", True, (150, 200, 115))
     surf.blit(sub, (cx - sub.get_width() // 2, cy - 20))
 
-    sub2 = _font(20).render("Walk to the staircase to choose a relic, then descend when ready.", True, (120, 160, 88))
+    sub2 = _font(20).render("Choose a relic, then descend when ready.", True, (120, 160, 88))
     surf.blit(sub2, (cx - sub2.get_width() // 2, cy + 16))
 
-    hint = _font(20).render("Press  SPACE  to descend", True, (115, 105, 72))
+    hint = _font(20).render("Press  SPACE  to choose a relic", True, (115, 105, 72))
     surf.blit(hint, (cx - hint.get_width() // 2, cy + 58))
 
 
@@ -1712,6 +1762,7 @@ def draw_arena_result(
 
 # ── Tutorial overlay ─────────────────────────────────────────────────────────
 
+
 def draw_tutorial_overlay(surf: pygame.Surface, step: int, key_layout: str) -> None:
     """Draw the tutorial hint banner at the top of the playfield."""
     panel_h = 64
@@ -1724,20 +1775,28 @@ def draw_tutorial_overlay(surf: pygame.Surface, step: int, key_layout: str) -> N
     cy = panel_h // 2
 
     if step == 0:
-        move_keys = {"zqsd": "Z Q S D", "wasd": "W A S D", "arrows": "← ↑ ↓ →"}.get(key_layout, "Z Q S D")
+        move_keys = {"zqsd": "Z Q S D", "wasd": "ZQSD / WASD" if config.IS_WEB else "W A S D", "arrows": "← ↑ ↓ →"}.get(
+            key_layout, "Z Q S D"
+        )
         text = _font(22, bold=True).render(f"Use  {move_keys}  to move around", True, (220, 240, 210))
         surf.blit(text, (cx - text.get_width() // 2, cy - text.get_height() // 2))
     elif step == 1:
         text = _font(22, bold=True).render("Press  Space  to dash!", True, (180, 230, 255))
         surf.blit(text, (cx - text.get_width() // 2, cy - text.get_height() // 2))
     elif step == 2:
-        text = _font(20).render("The hearts and coin count bottom-left are your lives — lose one if an enemy hits you.", True, (230, 160, 140))
+        text = _font(20).render(
+            "The hearts and coin count bottom-left are your lives — lose one if an enemy hits you.",
+            True,
+            (230, 160, 140),
+        )
         surf.blit(text, (cx - text.get_width() // 2, cy - text.get_height() // 2))
     elif step == 3:
         text = _font(20).render("Left Click to shoot  —  Defeat the Goblin Runner!", True, (200, 220, 255))
         surf.blit(text, (cx - text.get_width() // 2, cy - text.get_height() // 2))
     elif step == 4:
-        text = _font(20).render("Collect the coins — use them in shops to buy lives and upgrades!", True, (255, 220, 80))
+        text = _font(20).render(
+            "Collect the coins — use them in shops to buy lives and upgrades!", True, (255, 220, 80)
+        )
         surf.blit(text, (cx - text.get_width() // 2, cy - text.get_height() // 2))
     elif step == 5:
         text = _font(24, bold=True).render("You're ready!  Press  R  to return to the menu.", True, (255, 210, 60))
