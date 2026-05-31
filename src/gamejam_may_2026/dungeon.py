@@ -51,6 +51,7 @@ class DungeonRoom:
         # persist if the player re-enters the room.  Each entry is a plain dict:
         #   {"kind": "hp"|"perk", "cost": int, "perk": Perk|None, "bought": bool}
         self.shop_items: list = []
+        self.shopkeeper_pos: tuple[float, float] | None = None
 
     def __repr__(self) -> str:
         tags = []

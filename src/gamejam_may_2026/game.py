@@ -2028,6 +2028,8 @@ class Game:
         """Generate shop items for this room (idempotent — skipped if already generated)."""
         if dr.shop_items:
             return
+        if dr.shopkeeper_pos is None:
+            dr.shopkeeper_pos = dr.room.find_spawn_near_centre(20.0)
         fl = min(self.dungeon.floor, 7) - 1  # 0-based index
         hp_price = C.SHOP_HP_PRICE[fl]
         perk_price = C.SHOP_PERK_PRICE[fl]
@@ -2265,8 +2267,7 @@ class Game:
 
         # ── Shopkeeper proximity (shop rooms) ─────────────────────────────────
         if dr.is_shop and dr.cleared:
-            sx = float(C.ROOM_PIXEL_W // 2)
-            sy = float(C.ROOM_PIXEL_H // 2) - 60.0
+            sx, sy = dr.shopkeeper_pos or (float(C.ROOM_PIXEL_W // 2), float(C.ROOM_PIXEL_H // 2) - 60.0)
             dist2 = (p.x - sx) ** 2 + (p.y - sy) ** 2
             if self._shop_needs_exit:
                 if dist2 >= 65.0 ** 2:
@@ -2658,8 +2659,7 @@ class Game:
         for coin in self.coins:
             coin.draw(self.screen, cam)
         if dr.is_shop:
-            sx = float(C.ROOM_PIXEL_W // 2)
-            sy = float(C.ROOM_PIXEL_H // 2) - 60.0
+            sx, sy = dr.shopkeeper_pos or (float(C.ROOM_PIXEL_W // 2), float(C.ROOM_PIXEL_H // 2) - 60.0)
             near = not self._shop_needs_exit and (
                 (self.player.x - sx) ** 2 + (self.player.y - sy) ** 2 < 65.0 ** 2
             )
