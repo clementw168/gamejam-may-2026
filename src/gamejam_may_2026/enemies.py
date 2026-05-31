@@ -7,17 +7,16 @@ import math
 import random
 from typing import TYPE_CHECKING
 
+import constants as C
 import pygame
-
-from gamejam_may_2026 import constants as C
-from gamejam_may_2026 import sounds
-from gamejam_may_2026.projectiles import EnemyProjectile
+import sounds
+from projectiles import EnemyProjectile
 
 if TYPE_CHECKING:
-    from gamejam_may_2026.camera import Camera
-    from gamejam_may_2026.particles import ParticleSystem
-    from gamejam_may_2026.player import Player
-    from gamejam_may_2026.rooms import Room
+    from camera import Camera
+    from particles import ParticleSystem
+    from player import Player
+    from rooms import Room
 
 
 # ── Base ───────────────────────────────────────────────────────────────────────
@@ -589,7 +588,9 @@ class GoblinShaman(Enemy):
     _DEATH_COLOR_B = (220, 160, 255)
 
     def __init__(self, x: float, y: float, *, floor: int = 1) -> None:
-        super().__init__(x, y, hp=C.SHAMAN_HP, radius=C.SHAMAN_RADIUS, speed=C.SHAMAN_SPEED, coin_drop=C.SHAMAN_COIN_DROP)
+        super().__init__(
+            x, y, hp=C.SHAMAN_HP, radius=C.SHAMAN_RADIUS, speed=C.SHAMAN_SPEED, coin_drop=C.SHAMAN_COIN_DROP
+        )
         self.floor = floor
         # Minion-summon queue — game.py drains this each frame
         self._summon_queue: list[Enemy] = []
@@ -803,7 +804,9 @@ class AncientTree(Enemy):
                     a = player_angle - arc / 2 + frac * arc + jitter
                     projs.append(
                         EnemyProjectile(
-                            self.x, self.y, a,
+                            self.x,
+                            self.y,
+                            a,
                             speed=C.SPORE_SPEED,
                             color=C.C_TREE_ROOT,
                             damage=1,
@@ -835,7 +838,9 @@ class AncientTree(Enemy):
                     a = self._thorn_ring_offset + i * (math.pi * 2 / num)
                     projs.append(
                         EnemyProjectile(
-                            self.x, self.y, a,
+                            self.x,
+                            self.y,
+                            a,
                             speed=300,
                             color=C.C_THORN,
                             damage=1,
@@ -848,7 +853,9 @@ class AncientTree(Enemy):
                         a = self._thorn_ring_offset + (i + 0.5) * (math.pi * 2 / num)
                         projs.append(
                             EnemyProjectile(
-                                self.x, self.y, a,
+                                self.x,
+                                self.y,
+                                a,
                                 speed=200,
                                 color=(160, 215, 65),
                                 damage=1,
@@ -881,7 +888,8 @@ class AncientTree(Enemy):
                     offset = (i - (num - 1) / 2) * spread
                     projs.append(
                         EnemyProjectile(
-                            self.x, self.y,
+                            self.x,
+                            self.y,
                             self._aim_angle + offset,
                             speed=340,
                             color=C.C_TREE_ROOT,

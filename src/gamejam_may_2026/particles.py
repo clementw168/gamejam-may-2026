@@ -7,7 +7,7 @@ import random
 
 import pygame
 
-from gamejam_may_2026 import constants as C
+import constants as C
 
 
 class Particle:

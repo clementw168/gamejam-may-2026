@@ -28,11 +28,11 @@ from pathlib import Path
 
 import pygame
 
-from gamejam_may_2026 import config, sounds, ui
-from gamejam_may_2026 import constants as C
-from gamejam_may_2026.camera import Camera
-from gamejam_may_2026.dungeon import Dungeon, DungeonRoom
-from gamejam_may_2026.enemies import (
+import config, sounds, ui
+import constants as C
+from camera import Camera
+from dungeon import Dungeon, DungeonRoom
+from enemies import (
     AbyssalLeech,
     AncientTree,
     BoneArcher,
@@ -53,13 +53,13 @@ from gamejam_may_2026.enemies import (
     VoidSovereign,
     Wolf,
 )
-from gamejam_may_2026.particles import ParticleSystem
-from gamejam_may_2026.perks import PERK_POOL, Perk
-from gamejam_may_2026.player import Player
-from gamejam_may_2026.projectiles import Arrow, EnemyProjectile
-from gamejam_may_2026.relics import RELIC_POOL, Relic
-from gamejam_may_2026.rooms import Room
-from gamejam_may_2026.ui import (
+from particles import ParticleSystem
+from perks import PERK_POOL, Perk
+from player import Player
+from projectiles import Arrow, EnemyProjectile
+from relics import RELIC_POOL, Relic
+from rooms import Room
+from ui import (
     _arena_card_rect,
     _relic_card_rect,
     _upgrade_card_rect,
@@ -74,12 +74,19 @@ _SAVE_DIR = Path.home() / ".verdant-depths"
 _SCORE_FILE = _SAVE_DIR / "highscore.json"
 
 _SCORE_ZERO: dict = {"floors": 0, "rooms": 0, "coins": 0, "time": 0.0}
+_LS_KEY = "verdant_depths_highscore"
 
 
 def _load_highscore() -> dict:
     try:
-        data = json.loads(_SCORE_FILE.read_text())
-        # Ensure all keys exist so callers don't have to guard
+        if config.IS_WEB:
+            import platform
+            raw = platform.window.localStorage.getItem(_LS_KEY)
+            if raw is None:
+                return dict(_SCORE_ZERO)
+            data = json.loads(raw)
+        else:
+            data = json.loads(_SCORE_FILE.read_text())
         return {**_SCORE_ZERO, **data}
     except Exception:
         return dict(_SCORE_ZERO)
@@ -87,10 +94,26 @@ def _load_highscore() -> dict:
 
 def _save_highscore(score: dict) -> None:
     try:
-        _SAVE_DIR.mkdir(parents=True, exist_ok=True)
-        _SCORE_FILE.write_text(json.dumps(score))
+        if config.IS_WEB:
+            import platform
+            platform.window.localStorage.setItem(_LS_KEY, json.dumps(score))
+        else:
+            _SAVE_DIR.mkdir(parents=True, exist_ok=True)
+            _SCORE_FILE.write_text(json.dumps(score))
     except Exception:
         pass  # non-fatal — best-effort save
+
+
+def _clear_highscore() -> None:
+    try:
+        if config.IS_WEB:
+            import platform
+            platform.window.localStorage.removeItem(_LS_KEY)
+        else:
+            if _SCORE_FILE.exists():
+                _SCORE_FILE.unlink()
+    except Exception:
+        pass
 
 
 def _is_better(new: dict, old: dict) -> bool:
@@ -779,6 +802,7 @@ class Game:
 
         # Shop state
         self._shop_hovered: int = -1
+        self._shop_needs_exit: bool = False  # must walk away before shop can reopen
 
         # Boss-gate hint (shown when player bumps a boss-locked door)
         self._boss_hint_t: float = 0.0  # seconds remaining
@@ -838,6 +862,10 @@ class Game:
                 layout = ui.key_layout_chip_at(*event.pos)
                 if layout is not None:
                     config.KEY_LAYOUT = layout
+                elif ui.clear_record_button_at(*event.pos, self._highscore):
+                    _clear_highscore()
+                    self._highscore = dict(_SCORE_ZERO)
+                    self._new_highscore = False
                 else:
                     idx = ui.menu_button_at(*event.pos)
                     if idx == 0:
@@ -1595,14 +1623,14 @@ class Game:
         step = self._tutorial_step
 
         if step == 0:
-            # Advance when player moves >= 60 px from spawn
+            # Advance when player moves >= 60 px from spawn, with 2 s minimum to read the hint
             sx, sy = self._tutorial_start_pos
-            if (p.x - sx) ** 2 + (p.y - sy) ** 2 >= 60.0 ** 2:
+            if self._tutorial_t >= 2.0 and (p.x - sx) ** 2 + (p.y - sy) ** 2 >= 60.0 ** 2:
                 self._tutorial_step = 1
                 self._tutorial_t = 0.0
         elif step == 1:
-            # Advance when player dashes
-            if p._dashing:
+            # Advance when player dashes, with 2 s minimum to read the hint
+            if self._tutorial_t >= 2.0 and p._dashing:
                 self._tutorial_step = 2
                 self._tutorial_t = 0.0
                 # Spawn one GoblinRunner away from player
@@ -1610,18 +1638,18 @@ class Game:
                 ex, ey = positions[0] if positions else room.find_spawn_near_centre(30.0)
                 self.enemies = [GoblinRunner(ex, ey, floor=1)]
         elif step == 2:
-            # Advance after 2.5 seconds (give player time to read health info)
-            if self._tutorial_t >= 2.5:
+            # Advance after 5 seconds (give player time to read health info)
+            if self._tutorial_t >= 5.0:
                 self._tutorial_step = 3
                 self._tutorial_t = 0.0
         elif step == 3:
-            # Advance when all enemies are dead
-            if not self.enemies:
+            # Advance when all enemies are dead, with 1 s minimum to read the hint
+            if self._tutorial_t >= 1.0 and not self.enemies:
                 self._tutorial_step = 4
                 self._tutorial_t = 0.0
         elif step == 4:
-            # Advance when all coins collected OR 5 s elapsed
-            if not self.coins or self._tutorial_t >= 5.0:
+            # Advance when all coins collected OR 10 s elapsed
+            if not self.coins or self._tutorial_t >= 10.0:
                 self._tutorial_step = 5
                 self._tutorial_t = 0.0
         # step 5 = DONE; player presses R to return to menu (handled in handle_event)
@@ -1942,6 +1970,7 @@ class Game:
                 self._buy_shop_item(2)
             elif event.key in (pygame.K_SPACE, pygame.K_ESCAPE):
                 self._shop_hovered = -1
+                self._shop_needs_exit = True
                 self.state = "PLAYING"
 
     def _buy_shop_item(self, idx: int) -> None:
@@ -1964,39 +1993,41 @@ class Game:
         self.player.coins -= item["cost"]
         sounds.play("coin")
 
-    def _open_shop(self, dr: DungeonRoom) -> None:
-        """Generate shop items on first entry, then switch to SHOP state."""
-        if not dr.shop_items:
-            fl = min(self.dungeon.floor, 7) - 1  # 0-based index
-            hp_price = C.SHOP_HP_PRICE[fl]
-            perk_price = C.SHOP_PERK_PRICE[fl]
-            # Slot 0: HP vial (once per floor)
+    def _init_shop_items(self, dr: DungeonRoom) -> None:
+        """Generate shop items for this room (idempotent — skipped if already generated)."""
+        if dr.shop_items:
+            return
+        fl = min(self.dungeon.floor, 7) - 1  # 0-based index
+        hp_price = C.SHOP_HP_PRICE[fl]
+        perk_price = C.SHOP_PERK_PRICE[fl]
+        dr.shop_items.append(
+            {
+                "kind": "hp",
+                "cost": hp_price,
+                "label": "Heart Vial",
+                "desc": "Restore 1 HP.",
+                "icon": "♥",
+                "icon_id": "heart_vial",
+                "bought": False,
+            }
+        )
+        chosen = random.sample(_available_perks(self.player), 1)
+        for perk in chosen:
             dr.shop_items.append(
                 {
-                    "kind": "hp",
-                    "cost": hp_price,
-                    "label": "Heart Vial",
-                    "desc": "Restore 1 HP.",
-                    "icon": "♥",
-                    "icon_id": "heart_vial",
+                    "kind": "perk",
+                    "cost": perk_price,
+                    "label": perk.name,
+                    "desc": perk.desc,
+                    "icon": perk.icon,
+                    "icon_id": perk.id,
+                    "perk": perk,
                     "bought": False,
                 }
             )
-            # Slot 1: one random perk
-            chosen = random.sample(_available_perks(self.player), 1)
-            for perk in chosen:
-                dr.shop_items.append(
-                    {
-                        "kind": "perk",
-                        "cost": perk_price,
-                        "label": perk.name,
-                        "desc": perk.desc,
-                        "icon": perk.icon,
-                        "icon_id": perk.id,
-                        "perk": perk,
-                        "bought": False,
-                    }
-                )
+
+    def _open_shop_overlay(self) -> None:
+        """Switch to SHOP overlay state (items must already be initialised)."""
         self._shop_hovered = -1
         self.state = "SHOP"
 
@@ -2171,6 +2202,18 @@ class Game:
                 self._next_floor()
                 return
 
+        # ── Shopkeeper proximity (shop rooms) ─────────────────────────────────
+        if dr.is_shop and dr.cleared:
+            sx = float(C.ROOM_PIXEL_W // 2)
+            sy = float(C.ROOM_PIXEL_H // 2) - 60.0
+            dist2 = (p.x - sx) ** 2 + (p.y - sy) ** 2
+            if self._shop_needs_exit:
+                if dist2 >= 65.0 ** 2:
+                    self._shop_needs_exit = False
+            elif dist2 < 65.0 ** 2:
+                self._open_shop_overlay()
+                return
+
         # ── Room-clear check ──────────────────────────────────────────────────
         if not self.enemies and not dr.cleared:
             dr.cleared = True
@@ -2298,15 +2341,14 @@ class Game:
         # Spawn enemies only if room not yet cleared
         if not next_dr.cleared:
             if next_dr.is_shop:
-                # Shop rooms have no enemies; clear immediately and open shop
+                # Shop rooms have no enemies; clear immediately and let the
+                # player walk up to the shopkeeper NPC to open the overlay.
                 next_dr.cleared = True
                 self.enemies = []
                 self.coins.clear()
-                self._trans_old_room = None
-                self._trans_next = None
-                self._open_shop(next_dr)
-                return
-            if next_dr.is_boss:
+                self._init_shop_items(next_dr)
+                self._shop_needs_exit = False
+            elif next_dr.is_boss:
                 self.enemies = _spawn_boss(next_dr.room, self.dungeon.floor)
                 self.coins.clear()
             else:
@@ -2318,12 +2360,9 @@ class Game:
                 self.coins.clear()
         else:
             self.enemies = []
-            # Re-entering a shop room: re-open the shop overlay
+            # Re-entering a shop room: items already exist, just reset proximity cooldown
             if next_dr.is_shop:
-                self._trans_old_room = None
-                self._trans_next = None
-                self._open_shop(next_dr)
-                return
+                self._shop_needs_exit = False
 
         self._trans_old_room = None
         self._trans_next = None
@@ -2556,6 +2595,13 @@ class Game:
             self.screen.blit(ghost, (round(cx2) - r, round(cy2) - r))
         for coin in self.coins:
             coin.draw(self.screen, cam)
+        if dr.is_shop:
+            sx = float(C.ROOM_PIXEL_W // 2)
+            sy = float(C.ROOM_PIXEL_H // 2) - 60.0
+            near = not self._shop_needs_exit and (
+                (self.player.x - sx) ** 2 + (self.player.y - sy) ** 2 < 65.0 ** 2
+            )
+            ui.draw_shopkeeper(self.screen, cam, sx, sy, near=near)
         for chest in self.chests:
             chest.draw(self.screen, cam)
         if self._show_staircase and dr.is_boss:

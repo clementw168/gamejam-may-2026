@@ -2,40 +2,26 @@
 
 from __future__ import annotations
 
-import argparse
+import asyncio
+import os
 import sys
+
+# Ensure this directory is on sys.path so flat imports work whether we're
+# running as a package (uv run) or directly (pygbag web build).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pygame
 
-from gamejam_may_2026 import config, sounds
-from gamejam_may_2026 import constants as C
-from gamejam_may_2026.game import Game
+import config  # type: ignore[import-not-found]
+import constants as C  # type: ignore[import-not-found]
+import sounds  # type: ignore[import-not-found]
+from game import Game  # type: ignore[import-not-found]
+
+DEBUG = False
 
 
-def _parse_args() -> None:
-    parser = argparse.ArgumentParser(
-        prog="verdant-depths",
-        description="Verdant Depths — forest-ruins roguelite",
-    )
-    parser.add_argument(
-        "--keys",
-        choices=["arrows", "wasd", "zqsd"],
-        default="zqsd",
-        help="Key layout for movement  (default: zqsd)",
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug mode: infinite dash, HP floor 1, K kills all enemies",
-    )
-    args = parser.parse_args()
-    config.KEY_LAYOUT = args.keys
-    config.DEBUG = args.debug
-
-
-def main() -> None:
-    _parse_args()
-
+async def main() -> None:
+    config.DEBUG = DEBUG
     pygame.mixer.pre_init(44100, -16, 2, 512)  # 44 kHz, 16-bit signed, stereo
     pygame.init()
     pygame.mixer.init()
@@ -56,7 +42,7 @@ def main() -> None:
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                if game.state == "MENU":
+                if game.state == "MENU" and sys.platform != "emscripten":
                     pygame.quit()
                     sys.exit()
                 # All other states: forward to game (Esc toggles pause)
@@ -65,7 +51,7 @@ def main() -> None:
         game.update(dt)
         game.draw()
         pygame.display.flip()
+        await asyncio.sleep(0)
 
 
-if __name__ == "__main__":
-    main()
+asyncio.run(main())

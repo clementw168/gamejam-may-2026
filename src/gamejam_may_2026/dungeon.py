@@ -14,7 +14,7 @@ from __future__ import annotations
 import random
 from collections import deque
 
-from gamejam_may_2026.rooms import TEMPLATES, Room
+from rooms import TEMPLATES, Room
 
 # ── Direction helpers ─────────────────────────────────────────────────────────
 DIRS: dict[str, tuple[int, int]] = {

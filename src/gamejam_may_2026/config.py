@@ -5,7 +5,12 @@ Changed by main.py before the game starts (e.g. via --keys / --debug flags).
 
 from __future__ import annotations
 
+import sys
+
 import pygame
+
+# ── Platform detection ────────────────────────────────────────────────────────
+IS_WEB: bool = sys.platform == "emscripten"
 
 # ── Debug mode ───────────────────────────────────────────────────────────────
 # Enabled by --debug CLI flag.  Activates:
@@ -15,8 +20,8 @@ import pygame
 DEBUG: bool = False
 
 # ── Key layout ────────────────────────────────────────────────────────────────
-# Valid values: "arrows" | "wasd" | "zqsd"
-KEY_LAYOUT: str = "zqsd"
+# Valid values: "arrows" | "wasd" | "zqsd" (zqsd unavailable on web)
+KEY_LAYOUT: str = "wasd" if IS_WEB else "zqsd"
 
 _LAYOUTS: dict[str, dict[str, int]] = {
     "arrows": {
