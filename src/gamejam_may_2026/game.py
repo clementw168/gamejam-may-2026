@@ -1469,7 +1469,7 @@ class Game:
                         _ref_angle = math.atan2(p.y - enemy.y, p.x - enemy.x)
                         self.enemy_projectiles.append(
                             EnemyProjectile(enemy.x, enemy.y, _ref_angle,
-                                            speed=C.ARROW_SPEED, damage=actual_dmg, color=C.C_ARROW)
+                                            speed=C.ARROW_SPEED, damage=1, color=C.C_ARROW)
                         )
                         enemy.take_hit(actual_dmg, self.particles)
                         self.camera.add_shake(3)

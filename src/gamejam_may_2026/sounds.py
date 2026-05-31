@@ -33,7 +33,11 @@ import pygame
 # ── Internal state ────────────────────────────────────────────────────────────
 _sounds: dict[str, pygame.mixer.Sound] = {}
 _SAMPLE_RATE = 44100
-_MASTER_VOL = 0.38
+# On web (emscripten) Channel/Sound volume calls are unreliable — the SDL2 →
+# WebAudio gain chain may ignore them entirely.  Bake conservative PCM levels
+# so the worst-case simultaneous mix (2 music + sting + ~8 SFX) stays < 1.0
+# without any runtime scaling.  Native keeps the original louder values.
+_MASTER_VOL    = 0.10 if sys.platform == "emscripten" else 0.38
 _ASSET_DIR = pathlib.Path(__file__).parent / "assets" / "sounds"
 
 # ── Volume controls (user-adjustable, 0.0–1.0) ───────────────────────────────
@@ -128,6 +132,10 @@ def init() -> None:
     if not pygame.mixer.get_init():
         return
     try:
+        # 8 total channels: 0-2 reserved for music/stings, 3-7 for SFX.
+        # This caps simultaneous SFX at 5, preventing sum-to-clip on web.
+        pygame.mixer.set_num_channels(8)
+        pygame.mixer.set_reserved(3)
         _sounds["shoot"] = _load(
             "shoot",
             lambda: _synth(duration=0.09, freq=900, freq_end=580, shape="sine",
@@ -191,7 +199,7 @@ def init() -> None:
 
 # ── Music layer primitives ────────────────────────────────────────────────────
 
-_MUSIC_ABS_VOL = 0.28  # hard ceiling applied by _to_sound (never changes)
+_MUSIC_ABS_VOL = 0.10 if sys.platform == "emscripten" else 0.22
 
 
 def _to_sound(buf_f: list, vol: float = _MUSIC_ABS_VOL) -> pygame.mixer.Sound:
@@ -639,8 +647,14 @@ def init_music() -> None:
     opens immediately; tracks play as soon as they are ready.
     On emscripten (web) synthesis is synchronous (threads unavailable).
     """
+    global _sting_channel
     if not pygame.mixer.get_init():
         return
+
+    # Pre-allocate reserved channels — SFX Sound.play() will never touch these.
+    _music_channels[0] = pygame.mixer.Channel(0)
+    _music_channels[1] = pygame.mixer.Channel(1)
+    _sting_channel     = pygame.mixer.Channel(2)
 
     def _generate() -> None:
         try:
@@ -662,12 +676,11 @@ def init_music() -> None:
 
 
 def set_music_vol(v: float) -> None:
-    """Set music volume (0.0–1.0) and apply immediately to playing channels."""
+    """Set music volume (0.0–1.0) and apply immediately to all music Sound objects."""
     global music_vol
     music_vol = max(0.0, min(1.0, v))
-    for ch in _music_channels:
-        if ch and ch.get_busy():
-            ch.set_volume(music_vol)
+    for snd in _music_sounds.values():
+        snd.set_volume(music_vol)
 
 
 def set_sfx_vol(v: float) -> None:
@@ -695,12 +708,9 @@ def play_music(name: str) -> None:
 
     _music_active ^= 1
     ch = _music_channels[_music_active]
-    if ch is None:
-        ch = pygame.mixer.find_channel(True)
-        _music_channels[_music_active] = ch
-    if ch:
+    if ch is not None:
+        s.set_volume(music_vol)
         ch.play(s, loops=-1, fade_ms=1000)
-        ch.set_volume(music_vol)
 
 
 def play_sting(name: str) -> None:
@@ -711,11 +721,9 @@ def play_sting(name: str) -> None:
     s = _music_sounds.get(name)
     if s is None:
         return
-    if _sting_channel is None:
-        _sting_channel = pygame.mixer.find_channel(True)
-    if _sting_channel:
+    if _sting_channel is not None:
+        s.set_volume(music_vol)
         _sting_channel.play(s, loops=0, fade_ms=50)
-        _sting_channel.set_volume(music_vol)
 
 
 def stop_music(fade_ms: int = 800) -> None:
@@ -737,4 +745,6 @@ def play(name: str, volume: float = 1.0) -> None:
     s = _sounds.get(name)
     if s is not None:
         s.set_volume(max(0.0, min(1.0, volume * sfx_vol)))
+        if sys.platform == "emscripten":
+            s.stop()  # prevent stacking; 20 simultaneous enemy_deaths → one instance
         s.play()
