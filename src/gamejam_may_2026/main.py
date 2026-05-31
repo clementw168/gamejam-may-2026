@@ -42,7 +42,7 @@ async def main() -> None:
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                if game.state == "MENU":
+                if game.state == "MENU" and sys.platform != "emscripten":
                     pygame.quit()
                     sys.exit()
                 # All other states: forward to game (Esc toggles pause)
