@@ -19,12 +19,15 @@ if TYPE_CHECKING:
 
 # ── Font cache ────────────────────────────────────────────────────────────────
 _fonts: dict[tuple, pygame.font.Font] = {}
+_ASSETS = __import__("pathlib").Path(__file__).parent / "assets"
+_FONT_REGULAR = str(_ASSETS / "JetBrainsMono-Regular.ttf")
+_FONT_BOLD = str(_ASSETS / "JetBrainsMono-Bold.ttf")
 
 
 def _font(size: int, bold: bool = False) -> pygame.font.Font:
     key = (size, bold)
     if key not in _fonts:
-        _fonts[key] = pygame.font.SysFont("monospace", size, bold=bold)
+        _fonts[key] = pygame.font.Font(_FONT_BOLD if bold else _FONT_REGULAR, size)
     return _fonts[key]
 
 
