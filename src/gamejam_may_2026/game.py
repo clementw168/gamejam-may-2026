@@ -74,12 +74,19 @@ _SAVE_DIR = Path.home() / ".verdant-depths"
 _SCORE_FILE = _SAVE_DIR / "highscore.json"
 
 _SCORE_ZERO: dict = {"floors": 0, "rooms": 0, "coins": 0, "time": 0.0}
+_LS_KEY = "verdant_depths_highscore"
 
 
 def _load_highscore() -> dict:
     try:
-        data = json.loads(_SCORE_FILE.read_text())
-        # Ensure all keys exist so callers don't have to guard
+        if config.IS_WEB:
+            import platform
+            raw = platform.window.localStorage.getItem(_LS_KEY)
+            if raw is None:
+                return dict(_SCORE_ZERO)
+            data = json.loads(raw)
+        else:
+            data = json.loads(_SCORE_FILE.read_text())
         return {**_SCORE_ZERO, **data}
     except Exception:
         return dict(_SCORE_ZERO)
@@ -87,16 +94,24 @@ def _load_highscore() -> dict:
 
 def _save_highscore(score: dict) -> None:
     try:
-        _SAVE_DIR.mkdir(parents=True, exist_ok=True)
-        _SCORE_FILE.write_text(json.dumps(score))
+        if config.IS_WEB:
+            import platform
+            platform.window.localStorage.setItem(_LS_KEY, json.dumps(score))
+        else:
+            _SAVE_DIR.mkdir(parents=True, exist_ok=True)
+            _SCORE_FILE.write_text(json.dumps(score))
     except Exception:
         pass  # non-fatal — best-effort save
 
 
 def _clear_highscore() -> None:
     try:
-        if _SCORE_FILE.exists():
-            _SCORE_FILE.unlink()
+        if config.IS_WEB:
+            import platform
+            platform.window.localStorage.removeItem(_LS_KEY)
+        else:
+            if _SCORE_FILE.exists():
+                _SCORE_FILE.unlink()
     except Exception:
         pass
 

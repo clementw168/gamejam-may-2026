@@ -666,7 +666,7 @@ def draw_shop_screen(
             (130, 160, 165) if not bought else (65, 65, 65),
         )
 
-    hint = _font(17).render("1 / 2 / 3 to buy  ·  Space or Esc to leave", True, (70, 110, 120))
+    hint = _font(17).render("1 / 2 / 3 to buy  ·  Space to leave", True, (70, 110, 120))
     hint_y = _upgrade_card_rect(0).bottom + 18
     surf.blit(hint, (C.SCREEN_W // 2 - hint.get_width() // 2, hint_y))
 
