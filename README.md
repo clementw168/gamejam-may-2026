@@ -24,13 +24,6 @@ cd gamejam-may-2026
 uv run verdant-depths
 ```
 
-**Key layout options** (default: ZQSD):
-
-```bash
-uv run verdant-depths --keys wasd
-uv run verdant-depths --keys arrows
-```
-
 ## Build for web
 
 Uses [pygbag](https://pygame-web.github.io/) to compile to WebAssembly for HTML5 deployment (e.g. itch.io).
