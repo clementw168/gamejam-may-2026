@@ -25,7 +25,8 @@ async def main() -> None:
     pygame.mixer.pre_init(44100, -16, 2, 512)  # 44 kHz, 16-bit signed, stereo
     pygame.init()
     pygame.mixer.init()
-    sounds.init()  # generate / load all sounds
+    sounds.init()        # generate / load all sounds
+    sounds.init_music()  # generate / load background music loops
     pygame.display.set_caption("Verdant Depths")
     screen = pygame.display.set_mode((C.SCREEN_W, C.SCREEN_H))
     pygame.mouse.set_visible(True)

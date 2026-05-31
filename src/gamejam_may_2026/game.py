@@ -741,6 +741,10 @@ class Game:
         # Main menu button hover state
         self._menu_hovered: int = -1  # 0=dungeon 1=arena 2=codex
 
+        # Volume slider drag state
+        self._vol_drag: str | None = None         # "music" | "sfx"
+        self._vol_drag_screen: str | None = None  # "menu"  | "pause"
+
         # Arena mode state (persists across arena sessions)
         self._arena_selected: int = 0  # index into _ARENA_ENTRIES
         self._arena_count: int = 1  # enemies to spawn
@@ -858,7 +862,18 @@ class Game:
         if self.state == "MENU":
             if event.type == pygame.MOUSEMOTION:
                 self._menu_hovered = ui.menu_button_at(*event.pos)
+                if self._vol_drag and self._vol_drag_screen == "menu":
+                    self._apply_vol_drag(event.pos, "menu")
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                self._vol_drag = None
+                self._vol_drag_screen = None
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                hit = ui.volume_slider_hit(event.pos, "menu")
+                if hit:
+                    self._vol_drag = hit
+                    self._vol_drag_screen = "menu"
+                    self._apply_vol_drag(event.pos, "menu")
+                    return
                 layout = ui.key_layout_chip_at(*event.pos)
                 if layout is not None:
                     config.KEY_LAYOUT = layout
@@ -1010,7 +1025,20 @@ class Game:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_p:
             self.state = self._pre_pause_state
             return
+        if event.type == pygame.MOUSEMOTION and self._vol_drag and self._vol_drag_screen == "pause":
+            self._apply_vol_drag(event.pos, "pause")
+            return
+        if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self._vol_drag = None
+            self._vol_drag_screen = None
+            return
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            hit = ui.volume_slider_hit(event.pos, "pause")
+            if hit:
+                self._vol_drag = hit
+                self._vol_drag_screen = "pause"
+                self._apply_vol_drag(event.pos, "pause")
+                return
             resume_rect, menu_rect = ui.pause_button_rects()
             if resume_rect.collidepoint(event.pos):
                 self.state = self._pre_pause_state
@@ -1567,6 +1595,7 @@ class Game:
         p.update(dt, room, self.particles)
         if p.dead:
             self.state = "ARENA_DEAD"
+            sounds.play_sting("death")
             return
         self._apply_post_player_effects(dt, was_dashing, prev_px, prev_py, drop_coins=False)
         self._seal_all_doors(room)
@@ -1587,6 +1616,7 @@ class Game:
         self._update_burn_and_aura(dt)
         if not self.enemies:
             self.state = "ARENA_WIN"
+            sounds.play_sting("boss_defeat")
 
     # ── Tutorial mode ─────────────────────────────────────────────────────────
 
@@ -1864,6 +1894,7 @@ class Game:
         p.update(dt, room, self.particles)
         if p.dead:
             self.state = "ENDLESS_DEAD"
+            sounds.play_sting("death")
             return
         self._apply_post_player_effects(dt, was_dashing, prev_px, prev_py)
         self._seal_all_doors(room)
@@ -2098,8 +2129,37 @@ class Game:
         else:
             self._new_highscore = False
 
+    # ── Volume drag ───────────────────────────────────────────────────────────
+    def _apply_vol_drag(self, pos: tuple, screen: str) -> None:
+        if self._vol_drag is None:
+            return
+        v = ui.volume_from_click(pos, screen, self._vol_drag)
+        if self._vol_drag == "music":
+            sounds.set_music_vol(v)
+        else:
+            sounds.set_sfx_vol(v)
+
+    # ── Music ─────────────────────────────────────────────────────────────────
+    def _update_music(self) -> None:
+        if self.state in ("PAUSED", "CODEX", "ARENA_SELECT", "ARENA_RELIC_SELECT", "ENDLESS_SELECT"):
+            return  # keep whatever is playing during overlay/selection screens
+        if self.state == "MENU":
+            sounds.play_music("menu")
+            return
+        if self.state in ("DEAD", "VICTORY", "ARENA_WIN", "ARENA_DEAD", "ENDLESS_DEAD"):
+            sounds.stop_music()
+            return
+        dr = self.dungeon.current
+        in_boss_room = dr.is_boss and not dr.cleared
+        has_boss_enemy = any(getattr(e, "is_boss_enemy", False) for e in self.enemies if e.alive)
+        if in_boss_room or has_boss_enemy:
+            sounds.play_music("boss")
+        else:
+            sounds.play_music("dungeon")
+
     # ── Update ────────────────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
+        self._update_music()
         if self.state in ("MENU", "PAUSED", "CODEX", "ARENA_SELECT", "ARENA_RELIC_SELECT", "ENDLESS_SELECT"):
             return  # these states freeze all game logic
         self.camera.update(dt)
@@ -2132,6 +2192,7 @@ class Game:
         if p.dead:
             self._finish_run()
             self.state = "DEAD"
+            sounds.play_sting("death")
             return
         self._apply_post_player_effects(dt, was_dashing, prev_px, prev_py)
 
@@ -2223,6 +2284,7 @@ class Game:
             cy = float(C.ROOM_PIXEL_H // 2)
             self.particles.emit_room_clear(cx, cy)
             if dr.is_boss:
+                sounds.play_sting("boss_defeat")
                 if self.dungeon.floor >= 7:
                     self._finish_run()
                     self.state = "VICTORY"

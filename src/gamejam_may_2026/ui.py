@@ -869,6 +869,14 @@ def draw_menu(surf: pygame.Surface, highscore: dict, hovered: int = -1, key_layo
         no_hs = _font(15).render("No runs yet — be the first!", True, (65, 100, 55))
         surf.blit(no_hs, (cx - no_hs.get_width() // 2, best_top + 4))
 
+    # ── Volume sliders (left side) ────────────────────────────────────────────
+    import sounds as _sounds_mod
+    m_rect, s_rect = volume_slider_rects("menu")
+    vol_lbl = _font(15, bold=True).render("VOLUME", True, (80, 130, 65))
+    surf.blit(vol_lbl, (m_rect.x, m_rect.y - 38))
+    _draw_volume_slider(surf, "♪ Music", m_rect, _sounds_mod.music_vol, (95, 195, 90))
+    _draw_volume_slider(surf, "◉ Sound", s_rect, _sounds_mod.sfx_vol,   (90, 160, 195))
+
     # ── Credits ───────────────────────────────────────────────────────────────
     credit_lines = [
         ("Coded by Clement Wang · May 2026", False),
@@ -1103,6 +1111,76 @@ def draw_pause_screen(surf: pygame.Surface) -> None:
         pygame.draw.rect(surf, bd, rect, 2, border_radius=6)
         lbl = _font(24, bold=True).render(label, True, lc)
         surf.blit(lbl, (rect.centerx - lbl.get_width() // 2, rect.centery - lbl.get_height() // 2))
+
+    # ── Volume sliders ────────────────────────────────────────────────────────
+    import sounds as _sounds_mod  # local import to avoid circular at module level
+    m_rect, s_rect = volume_slider_rects("pause")
+    _draw_volume_slider(surf, "♪ Music", m_rect, _sounds_mod.music_vol, (130, 200, 100))
+    _draw_volume_slider(surf, "◉ Sound", s_rect, _sounds_mod.sfx_vol,   (130, 170, 200))
+
+
+# ── Volume slider helpers ──────────────────────────────────────────────────────
+
+_VOL_BAR_W  = 220
+_VOL_BAR_H  = 10
+_VOL_ROW_H  = 38  # label + bar + gap
+
+
+def volume_slider_rects(screen: str) -> tuple[pygame.Rect, pygame.Rect]:
+    """Return (music_bar_rect, sfx_bar_rect) for the given screen ('menu'|'pause')."""
+    if screen == "menu":
+        x, y = 50, 290
+    else:  # pause
+        _, menu_rect = pause_button_rects()
+        x = C.SCREEN_W // 2 - _VOL_BAR_W // 2
+        y = menu_rect.bottom + 28
+    music = pygame.Rect(x, y + 20,               _VOL_BAR_W, _VOL_BAR_H)
+    sfx   = pygame.Rect(x, y + 20 + _VOL_ROW_H,  _VOL_BAR_W, _VOL_BAR_H)
+    return music, sfx
+
+
+def _draw_volume_slider(surf: pygame.Surface, label: str, bar: pygame.Rect,
+                        value: float, fill_col: tuple) -> None:
+    lbl_s = _font(14).render(label, True, (145, 125, 80))
+    surf.blit(lbl_s, (bar.x, bar.y - 18))
+    # Track
+    pygame.draw.rect(surf, (35, 30, 18), bar, border_radius=5)
+    # Fill
+    fill_w = max(0, int(bar.width * value))
+    if fill_w > 0:
+        pygame.draw.rect(surf, fill_col, pygame.Rect(bar.x, bar.y, fill_w, bar.height), border_radius=5)
+    # Border
+    pygame.draw.rect(surf, (75, 65, 42), bar, 1, border_radius=5)
+    # Knob
+    kx = bar.x + int(bar.width * value)
+    knob = pygame.Rect(kx - 5, bar.centery - 7, 10, 14)
+    pygame.draw.rect(surf, (210, 230, 160), knob, border_radius=4)
+    # Value %
+    pct_s = _font(13).render(f"{int(value * 100)}%", True, (110, 140, 80))
+    surf.blit(pct_s, (bar.right + 8, bar.centery - pct_s.get_height() // 2))
+
+
+def volume_slider_hit(pos: tuple, screen: str) -> str | None:
+    """Return 'music', 'sfx', or None depending on which slider bar was hit."""
+    mx, my = pos
+    m_rect, s_rect = volume_slider_rects(screen)
+    hit_w = _VOL_BAR_W
+    # Expand hit zone vertically for easier clicking
+    m_hit = pygame.Rect(m_rect.x, m_rect.y - 10, hit_w, _VOL_BAR_H + 20)
+    s_hit = pygame.Rect(s_rect.x, s_rect.y - 10, hit_w, _VOL_BAR_H + 20)
+    if m_hit.collidepoint(mx, my):
+        return "music"
+    if s_hit.collidepoint(mx, my):
+        return "sfx"
+    return None
+
+
+def volume_from_click(pos: tuple, screen: str, which: str) -> float:
+    """Compute 0-1 value from a click position relative to the slider bar."""
+    m_rect, s_rect = volume_slider_rects(screen)
+    bar = m_rect if which == "music" else s_rect
+    v = (pos[0] - bar.x) / bar.width
+    return max(0.0, min(1.0, v))
 
 
 # ── Codex screen ──────────────────────────────────────────────────────────────
