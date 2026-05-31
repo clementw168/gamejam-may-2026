@@ -1001,6 +1001,60 @@ def draw_staircase(
     surf.blit(lbl, (sx - lbl.get_width() // 2, sy + 12))
 
 
+# ── Shopkeeper NPC ────────────────────────────────────────────────────────────
+
+
+def draw_shopkeeper(
+    surf: pygame.Surface,
+    camera: Camera,
+    x: float,
+    y: float,
+    near: bool = False,
+) -> None:
+    """Draw a merchant tent at world position (x, y)."""
+    sx, sy = camera.apply_pos(x, y)
+    sx, sy = round(sx), round(sy)
+
+    # Tent body (trapezoid drawn as a polygon)
+    tw, th = 52, 32
+    body_pts = [
+        (sx - tw // 2, sy + th // 2),
+        (sx + tw // 2, sy + th // 2),
+        (sx + tw // 2 - 8, sy - th // 2),
+        (sx - tw // 2 + 8, sy - th // 2),
+    ]
+    pygame.draw.polygon(surf, (55, 90, 55), body_pts)
+    pygame.draw.polygon(surf, (75, 130, 65), body_pts, 2)
+
+    # Tent roof (triangle)
+    roof_pts = [
+        (sx - tw // 2 + 6, sy - th // 2 + 2),
+        (sx + tw // 2 - 6, sy - th // 2 + 2),
+        (sx, sy - th // 2 - 22),
+    ]
+    pygame.draw.polygon(surf, (80, 50, 30), roof_pts)
+    pygame.draw.polygon(surf, (120, 75, 40), roof_pts, 2)
+
+    # Roof stripe
+    mid_top = (sx, sy - th // 2 - 22)
+    mid_base = (sx, sy - th // 2 + 2)
+    pygame.draw.line(surf, (160, 100, 50), mid_top, mid_base, 2)
+
+    # Door opening
+    dw, dh = 16, 20
+    pygame.draw.rect(surf, (20, 14, 8), (sx - dw // 2, sy + th // 2 - dh, dw, dh))
+
+    # "SHOP" sign above the tent
+    sign_col = (220, 190, 80) if near else (160, 140, 55)
+    sign = _font(13, bold=True).render("SHOP", True, sign_col)
+    surf.blit(sign, (sx - sign.get_width() // 2, sy - th // 2 - 34))
+
+    # Approach hint below
+    if near:
+        hint = _font(12).render("(approach to browse)", True, (190, 230, 180))
+        surf.blit(hint, (sx - hint.get_width() // 2, sy + th // 2 + 4))
+
+
 # ── Pause screen ──────────────────────────────────────────────────────────────
 
 _PAUSE_BTN_W = 260
