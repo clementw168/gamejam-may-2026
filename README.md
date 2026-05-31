@@ -6,7 +6,7 @@ A roguelite dungeon crawler set in overgrown forest ruins. Fight through 7 floor
 
 Built with [pygame-ce](https://pyga.me/) for a Game Jam with my friends in May 2026.
 
-<iframe frameborder="0" src="https://itch.io/embed/4629999?border_width=5&amp;link_color=04ca3e" width="560" height="175"><a href="https://clementw168.itch.io/verdant-depths">Verdant depths by clementw168</a></iframe>
+[![Available on itch.io](https://static.itch.io/images/badge-color.svg)](https://clementw168.itch.io/verdant-depths)
 
 ![Cover](./assets/promotion/cover.png)
 
