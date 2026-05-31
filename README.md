@@ -1,16 +1,20 @@
 # Verdant Depths
 
+![Banner](./assets/promotion/banner.png)
+
 A roguelite dungeon crawler set in overgrown forest ruins. Fight through 7 floors of increasingly dangerous enemies, collect perks and relics, and face powerful bosses on your way to the depths.
 
 Built with [pygame-ce](https://pyga.me/) for a Game Jam with my friends in May 2026.
 
-![Screenshot of the main menu](./assets/main_menu.png)
+<iframe frameborder="0" src="https://itch.io/embed/4629999?border_width=5&amp;link_color=04ca3e" width="560" height="175"><a href="https://clementw168.itch.io/verdant-depths">Verdant depths by clementw168</a></iframe>
 
-> 🎬 **Trailer**: [`assets/verdant_depth_trailer.mp4`](./assets/verdant_depth_trailer.mp4)
+![Cover](./assets/promotion/cover.png)
+
+[![Watch the trailer](https://img.youtube.com/vi/zwXn5EEU10w/maxresdefault.jpg)](https://youtu.be/zwXn5EEU10w?si=wWLaBtvZLqS1s487)
 
 ---
 
-## Install & Run
+## Install & Run locally
 
 **Requirements:** Python 3.11+ and [uv](https://docs.astral.sh/uv/getting-started/installation/)
 
@@ -26,6 +30,22 @@ uv run verdant-depths
 uv run verdant-depths --keys wasd
 uv run verdant-depths --keys arrows
 ```
+
+## Build for web
+
+Uses [pygbag](https://pygame-web.github.io/) to compile to WebAssembly for HTML5 deployment (e.g. itch.io).
+
+**Test locally:**
+```bash
+uv run python -m pygbag --ume_block 0 --width 1280 --height 720 src/gamejam_may_2026/
+```
+
+**Export a zip for itch.io:**
+```bash
+uv run python -m pygbag --build --ume_block 0 --width 1280 --height 720 src/gamejam_may_2026/
+cd src/gamejam_may_2026/build/web && zip -r ../../../../verdant-depths-web.zip .
+```
+
 
 ---
 
@@ -74,7 +94,7 @@ Infinite waves in a sealed room. Every 5-wave cycle rewards HP, perks, and relic
 
 12 regular enemies unlock progressively across the 7 floors — from melee chasers to teleporting casters, fast erratic bats, and burn-patch slugs.
 
-![Enemy showcase](./assets/enemies.gif)
+![Enemy showcase](./assets/readme/enemies.gif)
 
 | Enemy | Floor | Behaviour |
 |---|---|---|
@@ -97,7 +117,9 @@ Infinite waves in a sealed room. Every 5-wave cycle rewards HP, perks, and relic
 
 One unique boss per floor. Each boss has a **Phase 2** triggered around 50 % HP that changes their attack pattern, speeds up cooldowns, and adds new mechanics.
 
-![Boss showcase](./assets/boss.gif)
+![Boss showcase](./assets/promotion/boss_promo.png)
+
+![Boss gif](./assets/readme/boss.gif)
 
 | Floor | Boss | Notes |
 |---|---|---|
@@ -114,7 +136,7 @@ One unique boss per floor. Each boss has a **Phase 2** triggered around 50 % HP 
 
 12 perks total. After clearing a combat room, you might be offered **3 random perks**; pick one. Stack them across the run to define your build.
 
-![Perks](./assets/perks.png)
+![Perks](./assets/readme/perks.png)
 
 Highlights: **Piercing Shot** (arrows pass through all enemies), **Double Shot** (every click fires two arrows), **Iron Hide** (longer i-frames after a hit), **Coin Magnet** (bigger pickup radius), **Berserker** (faster dash).
 
@@ -124,7 +146,7 @@ Highlights: **Piercing Shot** (arrows pass through all enemies), **Double Shot**
 
 20 relics total. After each floor boss, you're offered **2 random relics**; pick one. Relics enable powerful build synergies — e.g. **Venom Gland** + **Echoing Shot** + **Piercing Shot** turns every arrow into a poison-spreading reflected chain.
 
-![Relics](./assets/relics.png)
+![Relics](./assets/readme/relics.png)
 
 Highlights:
 - **Echoing Shot** — arrow kills spawn a reflected arrow at the nearest enemy
@@ -133,6 +155,14 @@ Highlights:
 - **Hunter's Mark** — first enemy hit in every room takes ×3 damage
 - **Void Core** — emit a damaging 8-way pulse every 5 s
 - **Curse of Greed** — 2× coin drops, but every floor starts with 0 coins
+
+---
+
+## Screenshots
+
+![Social card](./assets/promotion/social_card.png)
+
+![Thumbnail](./assets/promotion/thumbnail.png)
 
 ---
 
