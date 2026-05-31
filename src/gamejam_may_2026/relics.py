@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
-    from gamejam_may_2026.player import Player
+    from player import Player
 
 
 @dataclass

@@ -7,14 +7,14 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from gamejam_may_2026 import config, sounds
-from gamejam_may_2026 import constants as C
-from gamejam_may_2026.projectiles import Arrow
+import config, sounds
+import constants as C
+from projectiles import Arrow
 
 if TYPE_CHECKING:
-    from gamejam_may_2026.camera import Camera
-    from gamejam_may_2026.particles import ParticleSystem
-    from gamejam_may_2026.rooms import Room
+    from camera import Camera
+    from particles import ParticleSystem
+    from rooms import Room
 
 
 class Player:

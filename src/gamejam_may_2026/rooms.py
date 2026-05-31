@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from gamejam_may_2026 import constants as C
+import constants as C
 
 if TYPE_CHECKING:
-    from gamejam_may_2026.camera import Camera
+    from camera import Camera
 
 # ── Tile helpers ──────────────────────────────────────────────────────────────
 

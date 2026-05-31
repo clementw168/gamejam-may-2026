@@ -7,15 +7,15 @@ from typing import TYPE_CHECKING, Any
 
 import pygame
 
-from gamejam_may_2026 import constants as C
-from gamejam_may_2026 import icons
+import constants as C
+import icons
 
 if TYPE_CHECKING:
-    from gamejam_may_2026.camera import Camera
-    from gamejam_may_2026.dungeon import Dungeon
-    from gamejam_may_2026.perks import Perk
-    from gamejam_may_2026.player import Player
-    from gamejam_may_2026.relics import Relic
+    from camera import Camera
+    from dungeon import Dungeon
+    from perks import Perk
+    from player import Player
+    from relics import Relic
 
 # ── Font cache ────────────────────────────────────────────────────────────────
 _fonts: dict[tuple, pygame.font.Font] = {}
@@ -1014,7 +1014,7 @@ def _get_codex_enemies() -> tuple[list, list]:
     if _CODEX_REGULAR is not None:
         return _CODEX_REGULAR, _CODEX_BOSSES
 
-    from gamejam_may_2026 import enemies as E  # type: ignore
+    import enemies as E  # type: ignore
 
     _CODEX_REGULAR = [
         (
@@ -1128,7 +1128,7 @@ def _codex_enemy_sprite(
     kwargs: dict,
 ) -> None:
     """Render a static enemy sprite centred at (cx, cy) clipped to a circle of radius clip_r."""
-    from gamejam_may_2026.camera import Camera  # type: ignore
+    from camera import Camera  # type: ignore
 
     # Create a throw-away enemy at world origin
     try:
@@ -1167,8 +1167,8 @@ def codex_tab_at(mx: int, my: int) -> int:
 
 def draw_codex(surf: pygame.Surface, tab: int, scroll: int = 0) -> None:
     """Full-screen Codex — enemies, bosses, relics and perks with sprites/icons."""
-    from gamejam_may_2026.perks import PERK_POOL  # type: ignore
-    from gamejam_may_2026.relics import RELIC_POOL  # type: ignore
+    from perks import PERK_POOL  # type: ignore
+    from relics import RELIC_POOL  # type: ignore
 
     surf.fill(C.C_BG)
 

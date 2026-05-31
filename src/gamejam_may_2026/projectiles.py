@@ -10,11 +10,11 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from gamejam_may_2026 import constants as C
+import constants as C
 
 if TYPE_CHECKING:
-    from gamejam_may_2026.camera import Camera
-    from gamejam_may_2026.rooms import Room
+    from camera import Camera
+    from rooms import Room
 
 
 class Arrow:

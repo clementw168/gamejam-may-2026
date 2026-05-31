@@ -28,11 +28,11 @@ from pathlib import Path
 
 import pygame
 
-from gamejam_may_2026 import config, sounds, ui
-from gamejam_may_2026 import constants as C
-from gamejam_may_2026.camera import Camera
-from gamejam_may_2026.dungeon import Dungeon, DungeonRoom
-from gamejam_may_2026.enemies import (
+import config, sounds, ui
+import constants as C
+from camera import Camera
+from dungeon import Dungeon, DungeonRoom
+from enemies import (
     AbyssalLeech,
     AncientTree,
     BoneArcher,
@@ -53,13 +53,13 @@ from gamejam_may_2026.enemies import (
     VoidSovereign,
     Wolf,
 )
-from gamejam_may_2026.particles import ParticleSystem
-from gamejam_may_2026.perks import PERK_POOL, Perk
-from gamejam_may_2026.player import Player
-from gamejam_may_2026.projectiles import Arrow, EnemyProjectile
-from gamejam_may_2026.relics import RELIC_POOL, Relic
-from gamejam_may_2026.rooms import Room
-from gamejam_may_2026.ui import (
+from particles import ParticleSystem
+from perks import PERK_POOL, Perk
+from player import Player
+from projectiles import Arrow, EnemyProjectile
+from relics import RELIC_POOL, Relic
+from rooms import Room
+from ui import (
     _arena_card_rect,
     _relic_card_rect,
     _upgrade_card_rect,
